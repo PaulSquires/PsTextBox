@@ -115,8 +115,15 @@ Swap the Output form's custom vscroll panel for CVScrollBar: create it, wire
   painted. Hosts filling a hidden control must refresh their scrollbar on show (tiko's
   frmOutput already does). Documented in README. (2) Mixed `DWSTRING &` concat chains
   are ambiguous-overload errors — harness builds long text in a plain `string` first.
+  Wheel-scroll fix (same day, after Paul's report -- real wheel did not scroll):
+  msftedit's own WM_MOUSEWHEEL handling never scrolled, even shown + focused +
+  WS_VSCROLL + real coords (EM_SCROLL worked throughout, isolating the wheel path).
+  Fix: the subclass implements wheel scrolling itself -- accumulated signed delta ->
+  EM_LINESCROLL, honoring SPI_GETWHEELSCROLLLINES incl. page-per-notch -- and fires
+  ScrollChangedCallback (user interaction notifies; programmatic ScrollToLine stays
+  silent). Asserted: one notch -> first visible = 3 with the callback firing live.
   NOT verified (author's interactive pass): typing/ENTER/TAB feel, cue-banner wrap
-  pixels, wheel scrolling + live scroll events, context menu incl. Select All,
+  pixels, real-hardware wheel + live scroll events, context menu incl. Select All,
   read-only behavior, focus border, single-line regressions by hand, DPI > 100%.
 - Phase B: not started
 - Phase C: deferred (separate task)

@@ -154,6 +154,14 @@ sub MyScrollCallback( byval hScrollBar as HWND, byval newPos as integer )
 end sub
 ```
 
+**Wheel scrolling is implemented by the control itself** — the RichEdit's native
+`WM_MOUSEWHEEL` handling ignored the message in this configuration even when shown,
+focused and styled `WS_VSCROLL`, so the subclass converts the (accumulated, signed)
+wheel delta to `EM_LINESCROLL`, honoring the system wheel-lines setting including
+page-per-notch. A user wheel scroll fires the ScrollChangedCallback; the programmatic
+`ScrollToLine` stays silent — the same user-interaction-notifies split as the other
+callbacks.
+
 `GetVScrollInfo`'s lines-per-page derives from the formatting-rect height and the text
 font's line height — no fudge factors; a partial line at the bottom is not counted.
 Caveat: a programmatic `SetText` into a control that has never been sized/shown may not

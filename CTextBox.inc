@@ -965,6 +965,40 @@ function CTextBoxRichEdit_SubclassProc ( _
                 return 0
             end if
 
+        case WM_MOUSEWHEEL
+            ' Multiline: the control scrolls itself. The RichEdit's own WM_MOUSEWHEEL
+            ' handling proved unreliable (ignored even when shown, focused and styled
+            ' WS_VSCROLL), so the subclass converts the wheel delta to EM_LINESCROLL.
+            ' A user scroll notifies the ScrollChangedCallback -- the same
+            ' user-interaction-notifies split the other callbacks follow (the
+            ' programmatic ScrollToLine stays silent).
+            if (pTextBox <> null) andalso (pTextBox->bMultiline = true) then
+                ' The delta is a SIGNED word in the high word (see C:\dev\Learnings.md);
+                ' positive = wheel away = scroll up. Accumulate so high-precision
+                ' wheels (deltas below one 120 notch) still add up to full notches.
+                pTextBox->nWheelAccum += cast(short, hiword(_wParam))
+                dim as long nNotches = pTextBox->nWheelAccum \ 120
+                if nNotches <> 0 then
+                    pTextBox->nWheelAccum -= nNotches * 120
+                    dim as ulong scrollLines = 3
+                    SystemParametersInfo( SPI_GETWHEELSCROLLLINES, 0, @scrollLines, 0 )
+                    if scrollLines = cast(ulong, &hFFFFFFFF) then
+                        ' WHEEL_PAGESCROLL: a page per notch.
+                        dim as long sbCmd = iif( nNotches > 0, SB_PAGEUP, SB_PAGEDOWN )
+                        for i as long = 1 to abs(nNotches)
+                            SendMessage( hWin, EM_SCROLL, sbCmd, 0 )
+                        next
+                    else
+                        SendMessage( hWin, EM_LINESCROLL, 0, _
+                                     cast(LPARAM, -(nNotches * cast(long, scrollLines)) ) )
+                    end if
+                    if pTextBox->ScrollChangedCallback then
+                        pTextBox->ScrollChangedCallback( hCtrl )
+                    end if
+                end if
+                return 0
+            end if
+
         case WM_SETFOCUS, WM_KILLFOCUS
             ' Numeric mode: on focus loss reformat the value to exactly DecimalPlaces
             ' ("5." -> "5.00"), silently. Runs before the FocusCallback so the host
@@ -1231,7 +1265,10 @@ function CTextBox_Create( byval hWndParent as HWND, byval CtrlID as integer, byv
     ' it grows past the client width. Multiline: word wrap (so NO ES_AUTOHSCROLL) with
     ' vertical auto-scrolling; ES_WANTRETURN only matters under IsDialogMessage but is
     ' harmless -- the newline itself is guaranteed by the subclass letting VK_RETURN
-    ' through. No scrollbar styles: an external scrollbar is driven via the scroll API.
+    ' through. No scrollbar styles: an external scrollbar is driven via the scroll API,
+    ' and the subclass implements wheel scrolling itself (the RichEdit's own
+    ' WM_MOUSEWHEEL handling proved unreliable -- it ignored the message even when
+    ' shown, focused and carrying WS_VSCROLL; proven by the harness assert).
     ' The child is shown by the first WM_SIZE.
     dim as long nEditStyle = WS_CHILD or WS_TABSTOP or ES_LEFT
     if bMultiline then
