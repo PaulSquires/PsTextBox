@@ -76,10 +76,17 @@ end type
 
 ' ----------------------------------------------------------------------------------------
 ' Creation.
-' The returned handle is the control's real HWND: position it with SetWindowPos, find it
-' with GetDlgItem(CtrlID). The RichEdit child is an implementation detail; reach it with
-' CTextBox_GetRichEditHandle only for RichEdit-specific messages the flat API (or the
-' forwarded EM_ range, see below) does not cover.
+' The returned handle is the control's real HWND: position it with SetWindowPos (include
+' SWP_SHOWWINDOW -- the control is created hidden), find it with GetDlgItem(CtrlID). The
+' RichEdit child is an implementation detail; reach it with CTextBox_GetRichEditHandle
+' only for RichEdit-specific messages the flat API (or the forwarded EM_ range, see
+' below) does not cover.
+'
+' Every pixel value passed to this API (margins, border width, corner radius) is a RAW
+' device pixel: DPI-scale at the call site (pWindow->ScaleX). The control never scales
+' a caller's value -- margins go verbatim into EM_SETMARGINS, so a control-side scale
+' would both lie to EM_GETMARGINS readers and double-scale hosts that already follow
+' the sibling convention of scaling before the call.
 '
 ' Message door: the container forwards the classic edit-control message range
 ' (EM_GETSEL .. EM_GETIMESTATUS) plus WM_SETTEXT / WM_GETTEXT / WM_GETTEXTLENGTH /

@@ -75,11 +75,11 @@ sub frmMain_PositionTextBoxes( byval hwnd as HWND )
     if nWidth < 50 then nWidth = 50
 
     dim as HWND hCtl = GetDlgItem( hwnd, IDC_FRMMAIN_TEXTBOX1 )
-    if IsWindow(hCtl) then SetWindowPos( hCtl, 0, nLeft, pWindow->ScaleY(DEMO_BOX1_TOP), nWidth, nHeight, SWP_NOZORDER )
+    if IsWindow(hCtl) then SetWindowPos( hCtl, 0, nLeft, pWindow->ScaleY(DEMO_BOX1_TOP), nWidth, nHeight, SWP_NOZORDER or SWP_SHOWWINDOW )
     hCtl = GetDlgItem( hwnd, IDC_FRMMAIN_TEXTBOX2 )
-    if IsWindow(hCtl) then SetWindowPos( hCtl, 0, nLeft, pWindow->ScaleY(DEMO_BOX2_TOP), nWidth, nHeight, SWP_NOZORDER )
+    if IsWindow(hCtl) then SetWindowPos( hCtl, 0, nLeft, pWindow->ScaleY(DEMO_BOX2_TOP), nWidth, nHeight, SWP_NOZORDER or SWP_SHOWWINDOW)
     hCtl = GetDlgItem( hwnd, IDC_FRMMAIN_TEXTBOX3 )
-    if IsWindow(hCtl) then SetWindowPos( hCtl, 0, nLeft, pWindow->ScaleY(DEMO_BOX3_TOP), nWidth, nHeight, SWP_NOZORDER )
+    if IsWindow(hCtl) then SetWindowPos( hCtl, 0, nLeft, pWindow->ScaleY(DEMO_BOX3_TOP), nWidth, nHeight, SWP_NOZORDER or SWP_SHOWWINDOW)
 end sub
 
 
@@ -221,9 +221,10 @@ function frmMain_Show( byval hWndParent as HWND ) as LRESULT
     CTextBox_SetCueBannerFont( hCtl, ghFont(CUEFONT_10) )
     CTextBox_SetBorderColor( hCtl, theme.BorderColor )
     CTextBox_SetFocusBorderColor( hCtl, theme.FocusAccent )
-    CTextBox_SetCornerRadius( hCtl, 4 )
+    ' All CTextBox pixel values are raw device pixels: DPI-scale at the call site.
+    CTextBox_SetCornerRadius( hCtl, pWindow->ScaleX(4) )
     CTextBox_SetOuterBackColor( hCtl, theme.BackColorWindow )   ' corners blend into the form
-    CTextBox_SetMargins( hCtl, 8, 8 )
+    CTextBox_SetMargins( hCtl, pWindow->ScaleX(8), pWindow->ScaleX(8) )
     CTextBox_SetChangeCallback( hCtl, @TextBox_ChangeCallback )
     CTextBox_SetFocusCallback( hCtl, @TextBox_FocusCallback )
     CTextBox_SetEnterPressedCallback( hCtl, @TextBox_EnterPressedCallback )
@@ -237,7 +238,7 @@ function frmMain_Show( byval hWndParent as HWND ) as LRESULT
     CTextBox_SetBorderColor( hCtl, theme.BorderColor )
     CTextBox_SetFocusBorderColor( hCtl, theme.FocusAccent )
     CTextBox_SetOuterBackColor( hCtl, theme.BackColorWindow )
-    CTextBox_SetMargins( hCtl, 16, 16 )
+    CTextBox_SetMargins( hCtl, pWindow->ScaleX(16), pWindow->ScaleX(16) )
     CTextBox_SetText( hCtl, "Read-only text set programmatically (no change event fired)" )
     CTextBox_SetReadOnly( hCtl, true )
     ' The message door: classic edit messages sent to the CONTROL reach the RichEdit.
@@ -255,7 +256,7 @@ function frmMain_Show( byval hWndParent as HWND ) as LRESULT
     CTextBox_SetOuterBackColor( hCtl, theme.BackColorWindow )
     CTextBox_SetCueBannerText( hCtl, "PIN (max 8)" )
     CTextBox_SetCueBannerColor( hCtl, theme.ForeColorCue )
-    CTextBox_SetMargins( hCtl, 8, 8 )
+    CTextBox_SetMargins( hCtl, pWindow->ScaleX(8), pWindow->ScaleX(8) )
     CTextBox_SetLimitText( hCtl, 8 )
     CTextBox_SetPasswordChar( hCtl, asc("*") )
 

@@ -53,9 +53,9 @@ CTextBox_SetCueBannerFont( hBox, hItalicFont )         ' optional; defaults to t
 
 CTextBox_SetBorderColor( hBox, BGR(60,66,77) )
 CTextBox_SetFocusBorderColor( hBox, BGR(86,156,214) )  ' lights up while editing
-CTextBox_SetCornerRadius( hBox, 4 )                    ' keep it small (plain GDI arcs)
+CTextBox_SetCornerRadius( hBox, pWindow->ScaleX(4) )   ' keep it small (plain GDI arcs)
 CTextBox_SetOuterBackColor( hBox, BGR(33,37,43) )      ' host background: corners blend in
-CTextBox_SetMargins( hBox, 8, 8 )
+CTextBox_SetMargins( hBox, pWindow->ScaleX(8), pWindow->ScaleX(8) )
 
 CTextBox_SetChangeCallback( hBox, @MyChangeCallback )
 CTextBox_SetEnterPressedCallback( hBox, @MyEnterCallback )
@@ -112,6 +112,10 @@ fbc64.exe -i "C:\dev" main.bas
 ```
 
 ## Design notes
+
+- **Pixel values are raw.** Margins, border width and corner radius are device pixels;
+  DPI-scale at the call site (`pWindow->ScaleX`). The control never scales a caller's
+  value, so nothing double-scales and `EM_GETMARGINS` always reads back what was set.
 
 - **A message loop caution:** `IsDialogMessage` swallows `VK_RETURN` / `VK_ESCAPE`
   before the textbox ever sees them, which defeats the EnterPressedCallback (and any
