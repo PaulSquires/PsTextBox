@@ -1,6 +1,7 @@
 # CTextBox
 
-A reusable single-line textbox custom control for FreeBASIC / Win32, built on AfxNova.
+A reusable textbox custom control for FreeBASIC / Win32, built on AfxNova — single-line
+by default, optionally **multiline** (word-wrapped; a creation-time choice).
 The editing engine is a **RichEdit50W** child window wrapped in a `CWindow` container —
 RichEdit rather than EDIT because it supports vertically centered text (`EM_SETRECT`)
 and per-control colors (`EM_SETCHARFORMAT` / `EM_SETBKGNDCOLOR`) without owner-draw.
@@ -14,9 +15,13 @@ Any number of instances can coexist; each owns all of its state.
   corners**, and a settable outer fill so the corners blend into the host background
 - **Left/right margins** (`EM_SETMARGINS`) and automatic horizontal scroll
   (`ES_AUTOHSCROLL`)
-- Dedicated **event callbacks** (change / focus / Enter) plus the sibling-standard
-  observe-with-veto message callback
-- Built-in, localizable right-click **Cut/Copy/Paste menu**
+- Dedicated **event callbacks** (change / focus / Enter / scroll-changed) plus the
+  sibling-standard observe-with-veto message callback
+- Built-in, localizable right-click **Cut/Copy/Paste/Select All menu**
+- Optional **multiline mode** (`CTextBox_Create(..., true)`) — word wrap, ENTER inserts
+  a newline, TAB inserts a tab character, no native scrollbar: an external scrollbar
+  (CVScrollBar) is driven through `ScrollChangedCallback` / `CTextBox_GetVScrollInfo` /
+  `CTextBox_ScrollToLine` (see *Multiline mode* below)
 - Optional **select-all on focus** (`CTextBox_SetSelectOnFocus`) — selects everything
   when focus arrives via Tab or a programmatic `SetFocus`; a mouse click still places
   the caret at the click point
@@ -36,7 +41,7 @@ Any number of instances can coexist; each owns all of its state.
 |---|---|
 | `CTextBox.bi` / `.inc` | The control. `CTextBox.bi` is the documented public header. |
 | `clsDoubleBuffer.bi` / `.inc` | Flicker-free drawing helper (chrome painting) |
-| `main.bas`, `frmMain.bi` / `.inc` | Demo / test harness (three instances) |
+| `main.bas`, `frmMain.bi` / `.inc` | Demo / test harness (five instances, incl. two multiline; `CTEXTBOX_SMOKE=1` runs the startup asserts and exits) |
 
 `CTextBox.bi` pulls in `AfxNova\AfxRichEdit.inc` itself (RichEdit definitions and
 helpers). Include order:
@@ -88,9 +93,12 @@ CTextBox_SetEnterPressedCallback( hBox, @MyEnterCallback )
   `SendMessage( hBox, EM_SETSEL, 0, -1 )` works from a separate control or window.
   One implementation, two doors: message for a separate control, function
   (`CTextBox_SetSel` etc.) for an in-process host.
-- **Single line, enforced.** No `ES_MULTILINE`; ENTER is swallowed (no newline, no
-  beep) and reported through the EnterPressedCallback; a multiline paste keeps only
-  what fits on one line.
+- **The line mode is fixed at creation.** `ES_MULTILINE` cannot be toggled on a live
+  window, so `CTextBox_Create`'s `bMultiline` parameter decides it once. Single-line
+  (the default): ENTER is swallowed (no newline, no beep) and reported through the
+  EnterPressedCallback; a multiline paste keeps only what fits on one line. Multiline:
+  ENTER and TAB are ordinary editing keys, text starts at the top (no vertical
+  centering), and the EnterPressedCallback never fires.
 - **Fonts are caller-owned.** The control converts the text `HFONT` to a `CHARFORMATW`
   (face, size, charset, bold/italic/underline/strikeout + forecolor) internally and
   re-derives vertical centering on every size or font change. It never deletes an HFONT.
@@ -109,15 +117,49 @@ CTextBox_SetEnterPressedCallback( hBox, @MyEnterCallback )
 |---|---|
 | `TXT_ChangeCallbackSub` | after a USER edit changed the text (programmatic = silent) |
 | `TXT_FocusCallbackSub` | RichEdit gained / lost keyboard focus (border already repainted) |
-| `TXT_EnterPressedCallbackSub` | ENTER pressed (the keypress itself is always swallowed) |
+| `TXT_EnterPressedCallbackSub` | ENTER pressed (single-line only; the keypress itself is always swallowed) |
 | `TXT_MessageCallbackFunc` | key / mouse / focus / context-menu messages, before the control acts; return TRUE to suppress. Suppressing `WM_SETFOCUS` / `WM_KILLFOCUS` also suppresses the RichEdit's caret handling — only do that on purpose. |
+| `TXT_ScrollChangedCallbackSub` | multiline only: the vertical scroll state may have changed (typing, programmatic SetText, wheel/keys). Unlike the ChangeCallback it is NOT silenced for programmatic changes — a scrollbar must hear about those too. |
 
 ## Context menu
 
-Right-click shows Cut / Copy / Paste, filtered by state (read-only offers Copy only;
-nothing eligible = no menu). Localize the labels with
-`CTextBox_SetMenuText( hBox, "Ausschneiden", "Kopieren", "Einfügen" )`. The
+Right-click shows Cut / Copy / Paste / Select All, filtered by state (read-only offers
+Copy and Select All only; Select All appears whenever the control holds text; nothing
+eligible = no menu). Localize the labels with
+`CTextBox_SetMenuText( hBox, "Ausschneiden", "Kopieren", "Einfügen", "Alles auswählen" )`
+— the fourth argument is optional; empty keeps the current Select All label. The
 MessageCallback sees `WM_CONTEXTMENU` first — return TRUE to suppress or replace it.
+
+## Multiline mode
+
+Create with `CTextBox_Create( hWndParent, CtrlID, true )`. The child gets
+`ES_MULTILINE or ES_AUTOVSCROLL or ES_WANTRETURN` and **no** `ES_AUTOHSCROLL`, so text
+word-wraps at the control width. No scrollbar styles are added — the control scrolls
+content but shows no native scrollbar, by design: pair it with an external themed
+scrollbar (CVScrollBar) through three pieces, all in LINE units:
+
+```freebasic
+' 1. The control says "my scroll state may have changed" (fires on typing,
+'    programmatic SetText, wheel/keyboard scrolling):
+sub MyScrollChanged( byval hTextBox as HWND )
+    dim as integer nTotal, nPage, nFirst
+    CTextBox_GetVScrollInfo( hTextBox, nTotal, nPage, nFirst )   ' 2. read the range
+    CVScrollBar_SetRange( hMyScrollBar, nTotal, nPage, nFirst )  '    push it
+end sub
+CTextBox_SetScrollChangedCallback( hBox, @MyScrollChanged )
+
+' 3. The scrollbar says "the user dragged to newPos":
+sub MyScrollCallback( byval hScrollBar as HWND, byval newPos as integer )
+    CTextBox_ScrollToLine( hBox, newPos )
+end sub
+```
+
+`GetVScrollInfo`'s lines-per-page derives from the formatting-rect height and the text
+font's line height — no fudge factors; a partial line at the bottom is not counted.
+Caveat: a programmatic `SetText` into a control that has never been sized/shown may not
+fire the callback (the RichEdit skips the display update) — hosts that fill a hidden
+control should refresh their scrollbar when showing it. Numeric mode is single-line
+only (`SetNumericMode` no-ops on a multiline control); the cue banner word-wraps.
 
 ## Building
 
