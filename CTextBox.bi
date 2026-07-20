@@ -21,15 +21,15 @@ end type
 ' programmatic setters are silent, only user interaction notifies -- the same split the
 ' sibling controls apply, and it lets a host call a setter from inside its own handler
 ' without re-entrancy.
-type TB_ChangeCallbackSub as sub( byval hTextBox as HWND )
+type TXT_ChangeCallbackSub as sub( byval hTextBox as HWND )
 
 ' Fired when the RichEdit child gains (bGotFocus = true) or loses (false) the keyboard
 ' focus. The control has already invalidated itself for the border color switch.
-type TB_FocusCallbackSub as sub( byval hTextBox as HWND, byval bGotFocus as boolean )
+type TXT_FocusCallbackSub as sub( byval hTextBox as HWND, byval bGotFocus as boolean )
 
 ' Fired when the user presses ENTER in the textbox. The keypress itself is always
 ' swallowed (the control is single-line; no newline, no beep).
-type TB_EnterPressedCallbackSub as sub( byval hTextBox as HWND )
+type TXT_EnterPressedCallbackSub as sub( byval hTextBox as HWND )
 
 ' Observe key, mouse, focus and context-menu messages before the control acts on them.
 ' Return TRUE if you handled the message and want the control's default handling (and
@@ -39,7 +39,7 @@ type TB_EnterPressedCallbackSub as sub( byval hTextBox as HWND )
 ' also suppresses the RichEdit's own caret handling -- only do that on purpose.
 ' Vetoing WM_KEYDOWN for VK_TAB repurposes Tab (the control otherwise consumes it to
 ' move focus to the next/previous tab stop -- e.g. veto it to drive a picker list).
-type TB_MessageCallbackFunc as function( byval m as CTEXTBOX_MESSAGEINFO ptr ) as boolean
+type TXT_MessageCallbackFunc as function( byval m as CTEXTBOX_MESSAGEINFO ptr ) as boolean
 
 type CTEXTBOX
     hWin            as HWND
@@ -85,10 +85,10 @@ type CTEXTBOX
     ' TRUE while the control itself writes to the RichEdit; EN_CHANGE is dropped so
     ' programmatic changes never reach the ChangeCallback.
     bInternalChange as boolean = false
-    ChangeCallback       as TB_ChangeCallbackSub
-    FocusCallback        as TB_FocusCallbackSub
-    EnterPressedCallback as TB_EnterPressedCallbackSub
-    MessageCallback      as TB_MessageCallbackFunc
+    ChangeCallback       as TXT_ChangeCallbackSub
+    FocusCallback        as TXT_FocusCallbackSub
+    EnterPressedCallback as TXT_EnterPressedCallbackSub
+    MessageCallback      as TXT_MessageCallbackFunc
 end type
 
 
@@ -213,7 +213,7 @@ declare sub      CTextBox_SetMenuText( byval hTextBoxControl as HWND, byval CutT
 '   EnterPressedCallback - ENTER pressed (keypress always swallowed).
 '   MessageCallback      - observe key/mouse/focus/context-menu messages; TRUE suppresses.
 ' ----------------------------------------------------------------------------------------
-declare sub      CTextBox_SetChangeCallback( byval hTextBoxControl as HWND, byval usersub as TB_ChangeCallbackSub )
-declare sub      CTextBox_SetFocusCallback( byval hTextBoxControl as HWND, byval usersub as TB_FocusCallbackSub )
-declare sub      CTextBox_SetEnterPressedCallback( byval hTextBoxControl as HWND, byval usersub as TB_EnterPressedCallbackSub )
-declare sub      CTextBox_SetMessageCallback( byval hTextBoxControl as HWND, byval userfunc as TB_MessageCallbackFunc )
+declare sub      CTextBox_SetChangeCallback( byval hTextBoxControl as HWND, byval usersub as TXT_ChangeCallbackSub )
+declare sub      CTextBox_SetFocusCallback( byval hTextBoxControl as HWND, byval usersub as TXT_FocusCallbackSub )
+declare sub      CTextBox_SetEnterPressedCallback( byval hTextBoxControl as HWND, byval usersub as TXT_EnterPressedCallbackSub )
+declare sub      CTextBox_SetMessageCallback( byval hTextBoxControl as HWND, byval userfunc as TXT_MessageCallbackFunc )

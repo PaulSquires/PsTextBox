@@ -105,10 +105,10 @@ CTextBox_SetEnterPressedCallback( hBox, @MyEnterCallback )
 
 | Callback | Fires |
 |---|---|
-| `TB_ChangeCallbackSub` | after a USER edit changed the text (programmatic = silent) |
-| `TB_FocusCallbackSub` | RichEdit gained / lost keyboard focus (border already repainted) |
-| `TB_EnterPressedCallbackSub` | ENTER pressed (the keypress itself is always swallowed) |
-| `TB_MessageCallbackFunc` | key / mouse / focus / context-menu messages, before the control acts; return TRUE to suppress. Suppressing `WM_SETFOCUS` / `WM_KILLFOCUS` also suppresses the RichEdit's caret handling — only do that on purpose. |
+| `TXT_ChangeCallbackSub` | after a USER edit changed the text (programmatic = silent) |
+| `TXT_FocusCallbackSub` | RichEdit gained / lost keyboard focus (border already repainted) |
+| `TXT_EnterPressedCallbackSub` | ENTER pressed (the keypress itself is always swallowed) |
+| `TXT_MessageCallbackFunc` | key / mouse / focus / context-menu messages, before the control acts; return TRUE to suppress. Suppressing `WM_SETFOCUS` / `WM_KILLFOCUS` also suppresses the RichEdit's caret handling — only do that on purpose. |
 
 ## Context menu
 

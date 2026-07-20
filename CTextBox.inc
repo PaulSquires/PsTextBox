@@ -666,25 +666,25 @@ end sub
 ' ========================================================================================
 ' Callback setters.
 ' ========================================================================================
-sub CTextBox_SetChangeCallback( byval hTextBoxControl as HWND, byval usersub as TB_ChangeCallbackSub )
+sub CTextBox_SetChangeCallback( byval hTextBoxControl as HWND, byval usersub as TXT_ChangeCallbackSub )
     dim as CTEXTBOX ptr pTextBox = GetTextBoxPointer(hTextBoxControl)
     if pTextBox = null then exit sub
     pTextBox->ChangeCallback = usersub
 end sub
 
-sub CTextBox_SetFocusCallback( byval hTextBoxControl as HWND, byval usersub as TB_FocusCallbackSub )
+sub CTextBox_SetFocusCallback( byval hTextBoxControl as HWND, byval usersub as TXT_FocusCallbackSub )
     dim as CTEXTBOX ptr pTextBox = GetTextBoxPointer(hTextBoxControl)
     if pTextBox = null then exit sub
     pTextBox->FocusCallback = usersub
 end sub
 
-sub CTextBox_SetEnterPressedCallback( byval hTextBoxControl as HWND, byval usersub as TB_EnterPressedCallbackSub )
+sub CTextBox_SetEnterPressedCallback( byval hTextBoxControl as HWND, byval usersub as TXT_EnterPressedCallbackSub )
     dim as CTEXTBOX ptr pTextBox = GetTextBoxPointer(hTextBoxControl)
     if pTextBox = null then exit sub
     pTextBox->EnterPressedCallback = usersub
 end sub
 
-sub CTextBox_SetMessageCallback( byval hTextBoxControl as HWND, byval userfunc as TB_MessageCallbackFunc )
+sub CTextBox_SetMessageCallback( byval hTextBoxControl as HWND, byval userfunc as TXT_MessageCallbackFunc )
     dim as CTEXTBOX ptr pTextBox = GetTextBoxPointer(hTextBoxControl)
     if pTextBox = null then exit sub
     pTextBox->MessageCallback = userfunc
