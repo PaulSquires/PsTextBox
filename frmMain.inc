@@ -15,6 +15,9 @@ dim shared gwszLastEvent as DWSTRING
 #define DEMO_BOX1_TOP    46
 #define DEMO_BOX2_TOP    122
 #define DEMO_BOX3_TOP    198
+#define DEMO_BOX4_TOP    274                ' multiline editable
+#define DEMO_BOX5_TOP    416                ' multiline read-only
+#define DEMO_MULTI_HEIGHT 110
 
 
 ' ========================================================================================
@@ -46,6 +49,14 @@ function frmMain_OnPaint( byval hwnd as HWND ) as LRESULT
     SetRect( @rcText, pWindow->ScaleX(DEMO_LEFT), pWindow->ScaleY(DEMO_BOX3_TOP - 22), _
              rc.right, pWindow->ScaleY(DEMO_BOX3_TOP) )
     b.PaintText( "Numeric only, 2 decimal places, formats on focus loss, empty shows 0.00:", @rcText, DT_LEFT )
+
+    SetRect( @rcText, pWindow->ScaleX(DEMO_LEFT), pWindow->ScaleY(DEMO_BOX4_TOP - 22), _
+             rc.right, pWindow->ScaleY(DEMO_BOX4_TOP) )
+    b.PaintText( "Multiline, editable: ENTER = newline, TAB = tab char, cue wraps, scroll events below:", @rcText, DT_LEFT )
+
+    SetRect( @rcText, pWindow->ScaleX(DEMO_LEFT), pWindow->ScaleY(DEMO_BOX5_TOP - 22), _
+             rc.right, pWindow->ScaleY(DEMO_BOX5_TOP) )
+    b.PaintText( "Multiline, read-only, 40 preloaded lines (wheel-scroll; menu offers Copy + Select All):", @rcText, DT_LEFT )
 
     if len(gwszLastEvent) then
         SetRect( @rcText, pWindow->ScaleX(DEMO_LEFT), rc.bottom - pWindow->ScaleY(30), _
@@ -80,6 +91,12 @@ sub frmMain_PositionTextBoxes( byval hwnd as HWND )
     if IsWindow(hCtl) then SetWindowPos( hCtl, 0, nLeft, pWindow->ScaleY(DEMO_BOX2_TOP), nWidth, nHeight, SWP_NOZORDER or SWP_SHOWWINDOW)
     hCtl = GetDlgItem( hwnd, IDC_FRMMAIN_TEXTBOX3 )
     if IsWindow(hCtl) then SetWindowPos( hCtl, 0, nLeft, pWindow->ScaleY(DEMO_BOX3_TOP), nWidth, nHeight, SWP_NOZORDER or SWP_SHOWWINDOW)
+
+    dim as long nMultiHeight = pWindow->ScaleY(DEMO_MULTI_HEIGHT)
+    hCtl = GetDlgItem( hwnd, IDC_FRMMAIN_TEXTBOX4 )
+    if IsWindow(hCtl) then SetWindowPos( hCtl, 0, nLeft, pWindow->ScaleY(DEMO_BOX4_TOP), nWidth, nMultiHeight, SWP_NOZORDER or SWP_SHOWWINDOW)
+    hCtl = GetDlgItem( hwnd, IDC_FRMMAIN_TEXTBOX5 )
+    if IsWindow(hCtl) then SetWindowPos( hCtl, 0, nLeft, pWindow->ScaleY(DEMO_BOX5_TOP), nWidth, nMultiHeight, SWP_NOZORDER or SWP_SHOWWINDOW)
 end sub
 
 
@@ -192,6 +209,15 @@ function TextBox_MessageCallback( byval m as CTEXTBOX_MESSAGEINFO ptr ) as boole
     return false
 end function
 
+sub TextBox_ScrollChangedCallback( byval hTextBox as HWND )
+    ' The CVScrollBar wiring pattern: on every fire, read the range and (there) push it
+    ' into CVScrollBar_SetRange( total, page, pos ). Here it goes to the status line.
+    dim as integer nTotal, nPage, nFirst
+    CTextBox_GetVScrollInfo( hTextBox, nTotal, nPage, nFirst )
+    Demo_ReportEvent( "scroll: id " & GetDlgCtrlID(hTextBox) & _
+                      "  total=" & nTotal & "  page=" & nPage & "  first=" & nFirst )
+end sub
+
 
 ' ========================================================================================
 ' frmMain_Show
@@ -207,7 +233,7 @@ function frmMain_Show( byval hWndParent as HWND ) as LRESULT
 
     HWND_FRMMAIN = pWindow->Create( _
             null, APPNAME, @frmMain_WndProc, _
-            100, 100, 700, 330 _
+            100, 100, 700, 650 _
             )
 
     ' --- Textbox 1: cue banner with its own color and italic font, rounded border that
@@ -263,10 +289,84 @@ function frmMain_Show( byval hWndParent as HWND ) as LRESULT
     CTextBox_SetSelectOnFocus( hCtl, true )    ' tab in, type a fresh amount
     CTextBox_SetZeroWhenEmpty( hCtl, true )    ' shows 0.00 instead of the cue
 
+    ' --- Textbox 4: MULTILINE, editable. ENTER inserts a newline (no EnterPressed
+    '     event exists in multiline), TAB inserts a tab character, the cue banner
+    '     word-wraps, and every scroll-state change reports through the
+    '     ScrollChangedCallback (the CVScrollBar wiring point). -----------------------
+    hCtl = CTextBox_Create( HWND_FRMMAIN, IDC_FRMMAIN_TEXTBOX4, true )
+    CTextBox_SetFont( hCtl, ghFont(GUIFONT_10) )
+    CTextBox_SetForeColor( hCtl, theme.ForeColor )
+    CTextBox_SetBackColor( hCtl, theme.BackColorBox )
+    CTextBox_SetBorderColor( hCtl, theme.BorderColor )
+    CTextBox_SetFocusBorderColor( hCtl, theme.FocusAccent )
+    CTextBox_SetOuterBackColor( hCtl, theme.BackColorWindow )
+    CTextBox_SetCueBannerText( hCtl, "Type multiline notes here... ENTER starts a new line, TAB indents, and this cue banner word-wraps instead of running off the right edge of the box." )
+    CTextBox_SetCueBannerColor( hCtl, theme.ForeColorCue )
+    CTextBox_SetCueBannerFont( hCtl, ghFont(CUEFONT_10) )
+    CTextBox_SetMargins( hCtl, pWindow->ScaleX(8), pWindow->ScaleX(8) )
+    CTextBox_SetChangeCallback( hCtl, @TextBox_ChangeCallback )
+    CTextBox_SetScrollChangedCallback( hCtl, @TextBox_ScrollChangedCallback )
+    CTextBox_SetNumericMode( hCtl, true )      ' must be REFUSED (multiline) - asserted below
+
+    ' --- Textbox 5: MULTILINE, read-only, preloaded with 40 numbered lines (the
+    '     Compiler Log shape). The scroll callback is set BEFORE the SetText so the
+    '     programmatic fire proves the callback is not gated like ChangeCallback. -----
+    hCtl = CTextBox_Create( HWND_FRMMAIN, IDC_FRMMAIN_TEXTBOX5, true )
+    CTextBox_SetFont( hCtl, ghFont(GUIFONT_10) )
+    CTextBox_SetForeColor( hCtl, theme.ForeColor )
+    CTextBox_SetBackColor( hCtl, theme.BackColorBox )
+    CTextBox_SetBorderColor( hCtl, theme.BorderColor )
+    CTextBox_SetFocusBorderColor( hCtl, theme.FocusAccent )
+    CTextBox_SetOuterBackColor( hCtl, theme.BackColorWindow )
+    CTextBox_SetMargins( hCtl, pWindow->ScaleX(8), pWindow->ScaleX(8) )
+    CTextBox_SetScrollChangedCallback( hCtl, @TextBox_ScrollChangedCallback )
+    ' Built in a plain string (mixed DWSTRING & chains are ambiguous overloads), then
+    ' converted once on assignment -- pure-ASCII content, so the ANSI conversion is safe.
+    dim as string sLines
+    for i as long = 1 to 40
+        sLines &= "Line " & i & " of 40 - preloaded read-only multiline content"
+        if i < 40 then sLines &= chr(13, 10)
+    next
+    dim as DWSTRING wszLines = sLines
+    CTextBox_SetText( hCtl, wszLines )
+    CTextBox_SetReadOnly( hCtl, true )
+
     frmMain_PositionTextBoxes( HWND_FRMMAIN )
+
+    ' --- Startup asserts (geometry is asserted, never eyeballed): the boxes are sized
+    '     now, so the scroll numbers are real. --------------------------------------
+    dim as HWND hMulti = GetDlgItem( HWND_FRMMAIN, IDC_FRMMAIN_TEXTBOX5 )
+    dim as integer nTotal, nPage, nFirst
+    CTextBox_GetVScrollInfo( hMulti, nTotal, nPage, nFirst )
+    s = "ASSERT total lines = 40: got " & nTotal & iif( nTotal = 40, "  [ok]", "  [FAIL]" )
+    print s
+    s = "ASSERT first visible = 0: got " & nFirst & iif( nFirst = 0, "  [ok]", "  [FAIL]" )
+    print s
+    ' Page count depends on DPI/font metrics; assert a sane band and print the exact
+    ' value for the hand-check (box is 110 design px tall, minus 1px border each side).
+    s = "ASSERT 3 <= page <= 12: got " & nPage & iif( (nPage >= 3) and (nPage <= 12), "  [ok]", "  [FAIL]" )
+    print s
+    CTextBox_ScrollToLine( hMulti, 10 )
+    CTextBox_GetVScrollInfo( hMulti, nTotal, nPage, nFirst )
+    s = "ASSERT ScrollToLine(10) -> first = 10: got " & nFirst & iif( nFirst = 10, "  [ok]", "  [FAIL]" )
+    print s
+    CTextBox_ScrollToLine( hMulti, 0 )
+    dim as boolean bNum = CTextBox_GetNumericMode( GetDlgItem(HWND_FRMMAIN, IDC_FRMMAIN_TEXTBOX4) )
+    s = "ASSERT numeric mode refused on multiline: " & iif( bNum = false, "[ok]", "[FAIL]" )
+    print s
+    dim as boolean bMulti4 = CTextBox_GetMultiline( GetDlgItem(HWND_FRMMAIN, IDC_FRMMAIN_TEXTBOX4) )
+    dim as boolean bMulti1 = CTextBox_GetMultiline( GetDlgItem(HWND_FRMMAIN, IDC_FRMMAIN_TEXTBOX1) )
+    s = "ASSERT GetMultiline box4/box1 = true/false: " & _
+        iif( (bMulti4 = true) andalso (bMulti1 = false), "[ok]", "[FAIL]" )
+    print s
 
     UpdateWindow( pWindow->hWindow )
     ShowWindow( pWindow->hWindow, SW_SHOW )
+
+    ' Unattended smoke run: CTEXTBOX_SMOKE=1 closes the window right away so the process
+    ' exits cleanly and a redirected stdout flushes (a killed FB process loses every
+    ' print -- see C:\dev\Learnings.md).
+    if environ("CTEXTBOX_SMOKE") <> "" then PostMessage( HWND_FRMMAIN, WM_CLOSE, 0, 0 )
 
     ' Process windows events
     dim uMsg as MSG
