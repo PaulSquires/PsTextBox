@@ -294,6 +294,22 @@ end sub
 
 
 ' ========================================================================================
+' Select-all-on-focus behavior.
+' ========================================================================================
+function CTextBox_GetSelectOnFocus( byval hTextBoxControl as HWND ) as boolean
+    dim as CTEXTBOX ptr pTextBox = GetTextBoxPointer(hTextBoxControl)
+    if pTextBox = null then return false
+    return pTextBox->bSelectOnFocus
+end function
+
+sub CTextBox_SetSelectOnFocus( byval hTextBoxControl as HWND, byval bSelect as boolean )
+    dim as CTEXTBOX ptr pTextBox = GetTextBoxPointer(hTextBoxControl)
+    if pTextBox = null then exit sub
+    pTextBox->bSelectOnFocus = bSelect
+end sub
+
+
+' ========================================================================================
 ' Clipboard and undo.
 ' ========================================================================================
 sub CTextBox_Cut( byval hTextBoxControl as HWND )
@@ -681,6 +697,17 @@ function CTextBoxRichEdit_SubclassProc ( _
             end if
             ' The border color depends on focus; repaint the container's chrome.
             InvalidateRect( hCtrl, null, true )
+            if (uMsg = WM_SETFOCUS) andalso (pTextBox <> null) then
+                if pTextBox->bSelectOnFocus then
+                    ' Let the RichEdit process the focus change first, then select:
+                    ' selection painting depends on the focus state being current. On a
+                    ' mouse click the click's own caret placement runs after this and
+                    ' wins -- select-on-focus is a keyboard/programmatic-focus behavior.
+                    dim as LRESULT focusResult = DefSubclassProc( hWin, uMsg, _wParam, _lParam )
+                    SendMessage( hWin, EM_SETSEL, 0, -1 )
+                    return focusResult
+                end if
+            end if
             ' fall through to DefSubclassProc: the RichEdit manages the caret here
 
         case WM_CONTEXTMENU

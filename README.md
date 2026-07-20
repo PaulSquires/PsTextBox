@@ -17,6 +17,9 @@ Any number of instances can coexist; each owns all of its state.
 - Dedicated **event callbacks** (change / focus / Enter) plus the sibling-standard
   observe-with-veto message callback
 - Built-in, localizable right-click **Cut/Copy/Paste menu**
+- Optional **select-all on focus** (`CTextBox_SetSelectOnFocus`) — selects everything
+  when focus arrives via Tab or a programmatic `SetFocus`; a mouse click still places
+  the caret at the click point
 - A **message door**: classic edit-control messages sent to the control are forwarded
   to the RichEdit child
 

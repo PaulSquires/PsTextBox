@@ -41,7 +41,7 @@ function frmMain_OnPaint( byval hwnd as HWND ) as LRESULT
 
     SetRect( @rcText, pWindow->ScaleX(DEMO_LEFT), pWindow->ScaleY(DEMO_BOX2_TOP - 22), _
              rc.right, pWindow->ScaleY(DEMO_BOX2_TOP) )
-    b.PaintText( "Read-only, wide margins, square border (context menu offers Copy only):", @rcText, DT_LEFT )
+    b.PaintText( "Read-only, wide margins, select-all on focus (context menu offers Copy only):", @rcText, DT_LEFT )
 
     SetRect( @rcText, pWindow->ScaleX(DEMO_LEFT), pWindow->ScaleY(DEMO_BOX3_TOP - 22), _
              rc.right, pWindow->ScaleY(DEMO_BOX3_TOP) )
@@ -241,6 +241,7 @@ function frmMain_Show( byval hWndParent as HWND ) as LRESULT
     CTextBox_SetMargins( hCtl, pWindow->ScaleX(16), pWindow->ScaleX(16) )
     CTextBox_SetText( hCtl, "Read-only text set programmatically (no change event fired)" )
     CTextBox_SetReadOnly( hCtl, true )
+    CTextBox_SetSelectOnFocus( hCtl, true )    ' Tab into this box selects everything
     ' The message door: classic edit messages sent to the CONTROL reach the RichEdit.
     dim as long nDoorLen = SendMessage( hCtl, WM_GETTEXTLENGTH, 0, 0 )
     dim as string s = "message door: WM_GETTEXTLENGTH on the control returned " & nDoorLen

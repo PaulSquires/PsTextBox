@@ -66,6 +66,10 @@ type CTEXTBOX
     wszMenuCut      as DWSTRING
     wszMenuCopy     as DWSTRING
     wszMenuPaste    as DWSTRING
+    ' Select the whole text when the control gains keyboard focus (Tab or programmatic
+    ' SetFocus). A mouse click still places the caret at the click point: the click's
+    ' own caret placement runs after the focus change and wins, by design.
+    bSelectOnFocus  as boolean = false
     ' TRUE while the control itself writes to the RichEdit; EN_CHANGE is dropped so
     ' programmatic changes never reach the ChangeCallback.
     bInternalChange as boolean = false
@@ -126,6 +130,10 @@ declare function CTextBox_SetReadOnly( byval hTextBoxControl as HWND, byval bRea
 declare function CTextBox_GetModify( byval hTextBoxControl as HWND ) as boolean
 declare sub      CTextBox_SetModify( byval hTextBoxControl as HWND, byval bModified as boolean )
 declare sub      CTextBox_SetPasswordChar( byval hTextBoxControl as HWND, byval wchChar as integer )   ' 0 = off
+' Select all text when the control gains keyboard focus (see the TYPE field comment:
+' a mouse click still places the caret). Default false.
+declare function CTextBox_GetSelectOnFocus( byval hTextBoxControl as HWND ) as boolean
+declare sub      CTextBox_SetSelectOnFocus( byval hTextBoxControl as HWND, byval bSelect as boolean )
 declare sub      CTextBox_Cut( byval hTextBoxControl as HWND )
 declare sub      CTextBox_Copy( byval hTextBoxControl as HWND )
 declare sub      CTextBox_Paste( byval hTextBoxControl as HWND )
