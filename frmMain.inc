@@ -270,8 +270,8 @@ function frmMain_Show( byval hWndParent as HWND ) as LRESULT
 
     ' Message loop. No IsDialogMessage here on purpose: it swallows VK_RETURN/VK_ESCAPE
     ' before the textbox sees them, which would defeat EnterPressedCallback and the ESC
-    ' handling in the MessageCallback. Hosts that need dialog Tab navigation must accept
-    ' that trade or route keys themselves.
+    ' handling in the MessageCallback. Tab still navigates between the boxes -- the
+    ' control handles VK_TAB itself (GetNextDlgTabItem), no dialog loop needed.
     do while GetMessage(@uMsg, null, 0, 0)
         if uMsg.message = WM_QUIT then exit do
         TranslateMessage @uMsg    ' Translates virtual-key messages into character messages.

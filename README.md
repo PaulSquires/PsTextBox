@@ -85,6 +85,11 @@ CTextBox_SetEnterPressedCallback( hBox, @MyEnterCallback )
 - **No mouse capture.** The RichEdit manages its own selection-drag capture; the
   container takes none, so the MessageCallback veto is honored uniformly — there is no
   press state a suppressed message could strand.
+- **Tab navigation is built in.** The RichEdit child carries `WS_TABSTOP` and the
+  container `WS_EX_CONTROLPARENT`, and the control handles `VK_TAB` itself
+  (`GetNextDlgTabItem`, Shift+Tab for backwards) — so tabbing between controls works
+  even without `IsDialogMessage` in the host's loop. Veto `VK_TAB` in the
+  MessageCallback to repurpose Tab (e.g. to drive a picker list).
 
 ## Callbacks
 

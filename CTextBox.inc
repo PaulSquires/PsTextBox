@@ -650,11 +650,27 @@ function CTextBoxRichEdit_SubclassProc ( _
         case WM_CHAR
             ' Single line: swallow ENTER so no newline is inserted and no beep sounds.
             if _wParam = 13 then return 0
+            ' Tab is navigation (handled on WM_KEYDOWN below), never a character.
+            if _wParam = 9 then return 0
 
         case WM_KEYDOWN
             if _wParam = VK_RETURN then
                 if (pTextBox <> null) andalso (pTextBox->EnterPressedCallback <> null) then
                     pTextBox->EnterPressedCallback( hCtrl )
+                end if
+                return 0
+            end if
+            if _wParam = VK_TAB then
+                ' Tab leaves the control: focus the next (Shift+Tab: previous) tab stop
+                ' of the top-level window. Handled here so tabbing works even in hosts
+                ' whose message loop has no IsDialogMessage (see CTextBox.bi). Reached
+                ' only when the MessageCallback declined the key -- a host can veto
+                ' VK_TAB to repurpose it (e.g. list navigation in a picker).
+                dim as HWND hRoot = GetAncestor( hWin, GA_ROOT )
+                if hRoot then
+                    dim as boolean bPrev = ( GetKeyState(VK_SHIFT) < 0 )
+                    dim as HWND hNext = GetNextDlgTabItem( hRoot, hWin, bPrev )
+                    if (hNext <> null) andalso (hNext <> hWin) then SetFocus( hNext )
                 end if
                 return 0
             end if
@@ -848,9 +864,12 @@ function CTextBox_Create( byval hWndParent as HWND, byval CtrlID as integer ) as
 
     dim pWindow as CWindow ptr = new CWindow
 
+    ' WS_EX_CONTROLPARENT: tab navigation (IsDialogMessage / GetNextDlgTabItem) must
+    ' see through this container to the WS_TABSTOP RichEdit child inside it.
     dim as HWND hForm = _
             pWindow->Create( hWndParent, "", @CTextBox_WndProc, _
-            0, 0, 0, 0, WS_CHILD or WS_CLIPSIBLINGS or WS_CLIPCHILDREN _
+            0, 0, 0, 0, WS_CHILD or WS_CLIPSIBLINGS or WS_CLIPCHILDREN, _
+            WS_EX_CONTROLPARENT _
             )
     ' CtrlID becomes the control window's id (GWLP_ID) so hosts can locate the
     ' control with GetDlgItem, same contract as CListBox/CVScrollBar/CStatusBar/CTabBar.

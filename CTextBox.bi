@@ -35,6 +35,8 @@ type TB_EnterPressedCallbackSub as sub( byval hTextBox as HWND )
 ' uniformly: the control takes no mouse capture, so there is no invariant a callback
 ' can strand by suppressing a message. CAUTION: suppressing WM_SETFOCUS/WM_KILLFOCUS
 ' also suppresses the RichEdit's own caret handling -- only do that on purpose.
+' Vetoing WM_KEYDOWN for VK_TAB repurposes Tab (the control otherwise consumes it to
+' move focus to the next/previous tab stop -- e.g. veto it to drive a picker list).
 type TB_MessageCallbackFunc as function( byval m as CTEXTBOX_MESSAGEINFO ptr ) as boolean
 
 type CTEXTBOX
