@@ -363,6 +363,19 @@ function frmMain_Show( byval hWndParent as HWND ) as LRESULT
     UpdateWindow( pWindow->hWindow )
     ShowWindow( pWindow->hWindow, SW_SHOW )
 
+    ' Wheel scrolling assert runs against the SHOWN window (the RichEdit's wheel
+    ' handling is tested in its real state): one downward notch straight to the
+    ' RichEdit child (delta -120 in the wParam high word) must move the first line.
+    ' One downward wheel notch (signed delta -120 in the wParam high word) must move
+    ' the first visible line -- the control's own wheel handler, so a plain SendMessage
+    ' exercises the real path (the RichEdit's native handling is bypassed entirely).
+    dim as long wheelParam = cast(long, cast(ushort, -120)) shl 16
+    SendMessage( CTextBox_GetRichEditHandle(hMulti), WM_MOUSEWHEEL, cast(WPARAM, wheelParam), 0 )
+    CTextBox_GetVScrollInfo( hMulti, nTotal, nPage, nFirst )
+    s = "ASSERT wheel notch down -> first > 0: got " & nFirst & iif( nFirst > 0, "  [ok]", "  [FAIL]" )
+    print s
+    CTextBox_ScrollToLine( hMulti, 0 )
+
     ' Unattended smoke run: CTEXTBOX_SMOKE=1 closes the window right away so the process
     ' exits cleanly and a redirected stdout flushes (a killed FB process loses every
     ' print -- see C:\dev\Learnings.md).
