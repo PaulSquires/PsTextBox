@@ -77,6 +77,8 @@ CTextBox_SetEnterPressedCallback( hBox, @MyEnterCallback )
   `CtrlID` (`GetDlgItem` finds it). Position it with `SetWindowPos`; the RichEdit child
   is derived geometry (inset by the border width) and is never positioned by the host.
   `CTextBox_GetRichEditHandle` exists as an escape hatch for RichEdit-specific messages.
+  Keyboard focus sits on the child, so `GetFocus() = hBox` is always false — use
+  `CTextBox_HasFocus( hBox )` for focus tests.
 - **Programmatic setters are silent.** `SetText` / `ReplaceSel` / `Clear` (and a
   forwarded `WM_SETTEXT`) never fire the ChangeCallback; only user edits do — typing,
   cut/paste, undo. A host can safely call a setter from inside its own handler.
