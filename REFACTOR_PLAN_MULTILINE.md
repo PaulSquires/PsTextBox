@@ -136,6 +136,17 @@ Swap the Output form's custom vscroll panel for CVScrollBar: create it, wire
   NOT verified (author's interactive pass): Notes typing/saving across project
   switches, log fill on compile, wheel + custom thumb drag/page-click, context
   menu, Edit-menu routing, theme switch, panel resize/minimize, DPI > 100%.
-- Phase C: deferred (separate task) — swap the custom vscroll panel for CVScrollBar
-  (glue: ScrollChangedCallback -> GetVScrollInfo -> CVScrollBar_SetRange;
-  ScrollCallback -> ScrollToLine).
+- Phase C: **done** (2026-07-20) — frmOutput's CPanelWindow scrollbar (WndProc,
+  calcVThumbRect, OUTPUT_VSCROLL_TYPE/gOutputVScroll) deleted, replaced by
+  CVScrollBar with the planned three-piece glue (ScrollChangedCallback ->
+  GetVScrollInfo -> SetRange, gated to the visible textbox and re-pushed on tab
+  switch; ScrollCallback -> ScrollToLine). Paint callback preserves the old
+  flat-track/divider visuals and reads theme colors live. PositionWindows computes
+  the ScaleX(12) width instead of querying the (0x0-created) control. Net -127
+  lines. Merged --no-ff into tiko `development` (f6c50c8). Build clean, zero
+  warnings; 5s launch smoke ok.
+  NOT verified (author's interactive pass): thumb drag, track-click paging +
+  auto-repeat, hover state, wheel/thumb staying in sync, tab switches between
+  Log/Notes, theme switch, panel resize/minimize, DPI > 100%.
+  Bonus CVScrollBar gains over the old panel: track-click auto-repeat, hover
+  tracking, capture-loss cancel.
