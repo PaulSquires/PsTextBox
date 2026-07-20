@@ -76,9 +76,12 @@ type CTEXTBOX
     '     are accepted (typed OR pasted), with at most nDecimalPlaces fractional digits
     '     (0 = integers only). On focus loss a non-empty value is reformatted to exactly
     '     nDecimalPlaces (silently -- no ChangeCallback); empty stays empty so the cue
-    '     banner can show. ---
+    '     banner can show -- unless bZeroWhenEmpty, which stamps the formatted zero
+    '     ("0.00") instead, so the box always displays a value (and the cue banner
+    '     effectively never shows once the box has been visited). ---
     bNumericOnly    as boolean = false
     nDecimalPlaces  as integer = 2
+    bZeroWhenEmpty  as boolean = false
     ' TRUE while the control itself writes to the RichEdit; EN_CHANGE is dropped so
     ' programmatic changes never reach the ChangeCallback.
     bInternalChange as boolean = false
@@ -152,6 +155,11 @@ declare function CTextBox_GetDecimalPlaces( byval hTextBoxControl as HWND ) as i
 declare sub      CTextBox_SetDecimalPlaces( byval hTextBoxControl as HWND, byval nPlaces as integer )
 declare function CTextBox_GetValue( byval hTextBoxControl as HWND ) as double
 declare function CTextBox_SetValue( byval hTextBoxControl as HWND, byval nValue as double ) as boolean
+' Numeric mode only: display the formatted zero ("0.00") instead of an empty box. The
+' setter stamps it immediately when the box is currently empty and unfocused; after
+' that, every focus loss with an empty buffer restores it. Trumps the cue banner.
+declare function CTextBox_GetZeroWhenEmpty( byval hTextBoxControl as HWND ) as boolean
+declare sub      CTextBox_SetZeroWhenEmpty( byval hTextBoxControl as HWND, byval bEnable as boolean )
 declare sub      CTextBox_Cut( byval hTextBoxControl as HWND )
 declare sub      CTextBox_Copy( byval hTextBoxControl as HWND )
 declare sub      CTextBox_Paste( byval hTextBoxControl as HWND )

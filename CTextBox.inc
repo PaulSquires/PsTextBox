@@ -394,6 +394,26 @@ function CTextBox_SetValue( byval hTextBoxControl as HWND, byval nValue as doubl
                 CTextBox_FormatNumeric( nValue, pTextBox->nDecimalPlaces, false ) )
 end function
 
+' Display the formatted zero instead of an empty box (numeric mode only).
+function CTextBox_GetZeroWhenEmpty( byval hTextBoxControl as HWND ) as boolean
+    dim as CTEXTBOX ptr pTextBox = GetTextBoxPointer(hTextBoxControl)
+    if pTextBox = null then return false
+    return pTextBox->bZeroWhenEmpty
+end function
+
+sub CTextBox_SetZeroWhenEmpty( byval hTextBoxControl as HWND, byval bEnable as boolean )
+    dim as CTEXTBOX ptr pTextBox = GetTextBoxPointer(hTextBoxControl)
+    if pTextBox = null then exit sub
+    pTextBox->bZeroWhenEmpty = bEnable
+    ' Apply immediately when the box is already empty and not being edited; a focused
+    ' box is left alone (the user may be mid-entry) -- its focus loss will stamp it.
+    if bEnable andalso pTextBox->bNumericOnly then
+        if (GetWindowTextLength(pTextBox->hRichEdit) = 0) andalso (GetFocus() <> pTextBox->hRichEdit) then
+            CTextBox_SetValue( hTextBoxControl, 0 )
+        end if
+    end if
+end sub
+
 
 ' ========================================================================================
 ' Clipboard and undo.
@@ -838,11 +858,12 @@ function CTextBoxRichEdit_SubclassProc ( _
         case WM_SETFOCUS, WM_KILLFOCUS
             ' Numeric mode: on focus loss reformat the value to exactly DecimalPlaces
             ' ("5." -> "5.00"), silently. Runs before the FocusCallback so the host
-            ' reads the formatted text. Empty stays empty -- the cue banner shows.
+            ' reads the formatted text. Empty stays empty -- the cue banner shows --
+            ' unless ZeroWhenEmpty, which stamps the formatted zero instead.
             if (uMsg = WM_KILLFOCUS) andalso (pTextBox <> null) then
                 if pTextBox->bNumericOnly then
                     dim as DWSTRING wszText = RichEdit_GetText( hWin )
-                    if len(wszText) > 0 then
+                    if (len(wszText) > 0) orelse (pTextBox->bZeroWhenEmpty = true) then
                         dim as DWSTRING wszFormatted = _
                             CTextBox_FormatNumeric( val(wszText), pTextBox->nDecimalPlaces, false )
                         if wszFormatted <> wszText then

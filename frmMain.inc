@@ -45,7 +45,7 @@ function frmMain_OnPaint( byval hwnd as HWND ) as LRESULT
 
     SetRect( @rcText, pWindow->ScaleX(DEMO_LEFT), pWindow->ScaleY(DEMO_BOX3_TOP - 22), _
              rc.right, pWindow->ScaleY(DEMO_BOX3_TOP) )
-    b.PaintText( "Numeric only, 2 decimal places, formats on focus loss, borderless:", @rcText, DT_LEFT )
+    b.PaintText( "Numeric only, 2 decimal places, formats on focus loss, empty shows 0.00:", @rcText, DT_LEFT )
 
     if len(gwszLastEvent) then
         SetRect( @rcText, pWindow->ScaleX(DEMO_LEFT), rc.bottom - pWindow->ScaleY(30), _
@@ -261,6 +261,7 @@ function frmMain_Show( byval hWndParent as HWND ) as LRESULT
     CTextBox_SetNumericMode( hCtl, true )
     CTextBox_SetDecimalPlaces( hCtl, 2 )
     CTextBox_SetSelectOnFocus( hCtl, true )    ' tab in, type a fresh amount
+    CTextBox_SetZeroWhenEmpty( hCtl, true )    ' shows 0.00 instead of the cue
 
     frmMain_PositionTextBoxes( HWND_FRMMAIN )
 

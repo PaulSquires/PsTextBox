@@ -24,7 +24,9 @@ Any number of instances can coexist; each owns all of its state.
   leading minus and one decimal separator, typed *or pasted*, with a configurable
   number of decimal places (`CTextBox_SetDecimalPlaces`, 0 = integers only). On focus
   loss the value is reformatted to exactly that many places (empty stays empty so the
-  cue can show). `CTextBox_GetValue` / `CTextBox_SetValue` trade the text as a double.
+  cue can show — or set `CTextBox_SetZeroWhenEmpty` to display the formatted zero,
+  e.g. `0.00`, instead). `CTextBox_GetValue` / `CTextBox_SetValue` trade the text as
+  a double.
 - A **message door**: classic edit-control messages sent to the control are forwarded
   to the RichEdit child
 
