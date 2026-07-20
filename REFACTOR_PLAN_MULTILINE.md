@@ -125,5 +125,17 @@ Swap the Output form's custom vscroll panel for CVScrollBar: create it, wire
   NOT verified (author's interactive pass): typing/ENTER/TAB feel, cue-banner wrap
   pixels, real-hardware wheel + live scroll events, context menu incl. Select All,
   read-only behavior, focus border, single-line regressions by hand, DPI > 100%.
-- Phase B: not started
-- Phase C: deferred (separate task)
+- Phase B: **done** (2026-07-20) — CTextBox.bi/.inc synced into tiko\src; frmOutput
+  converted per plan (both richedits -> multiline CTextBox; RichEdit subclass proc,
+  MSG_USER_RICHEDIT_SELECTALL case, EN_UPDATE/EN_CHANGE WM_COMMAND handlers,
+  GetVisibleLineCount + "-4" fudge, and the EM_SETRECT indent hacks all deleted;
+  thumb math on GetVScrollInfo, scroll writes on ScrollToLine); frmMainEdit focus
+  tests wrapped in CTextBox_GetRichEditHandle. Merged --no-ff into tiko's
+  `development` (a48d70f). Build clean via _compile.bat, zero warnings; app
+  launches and runs (5s smoke, main window up, then killed).
+  NOT verified (author's interactive pass): Notes typing/saving across project
+  switches, log fill on compile, wheel + custom thumb drag/page-click, context
+  menu, Edit-menu routing, theme switch, panel resize/minimize, DPI > 100%.
+- Phase C: deferred (separate task) — swap the custom vscroll panel for CVScrollBar
+  (glue: ScrollChangedCallback -> GetVScrollInfo -> CVScrollBar_SetRange;
+  ScrollCallback -> ScrollToLine).
