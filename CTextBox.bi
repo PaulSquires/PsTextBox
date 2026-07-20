@@ -1,11 +1,13 @@
 
 #pragma once
 
+#include once "vbcompat.bi"                 ' format() -- numeric mode formatting
 #include once "clsDoubleBuffer.bi"
 ' AfxNova's RichEdit wrapper: pulls in win/richedit.bi (CHARFORMATW, EM_CANPASTE, ...)
 ' and supplies the RichEdit_* helpers used by the implementation (GetText, GetSelText,
 ' CanPaste, ...). Prefer these over re-rolled SendMessage wrappers.
 #include once "AfxNova\AfxRichEdit.inc"
+#include once "AfxNova\AfxWin.inc"          ' AfxGetClipboardText -- numeric paste validation
 
 type CTEXTBOX_MESSAGEINFO
     hTextBox        as HWND       ' the CONTROL (container) handle, not the RichEdit child
@@ -70,6 +72,13 @@ type CTEXTBOX
     ' SetFocus). A mouse click still places the caret at the click point: the click's
     ' own caret placement runs after the focus change and wins, by design.
     bSelectOnFocus  as boolean = false
+    ' --- Numeric input mode: only digits, one leading minus and one decimal separator
+    '     are accepted (typed OR pasted), with at most nDecimalPlaces fractional digits
+    '     (0 = integers only). On focus loss a non-empty value is reformatted to exactly
+    '     nDecimalPlaces (silently -- no ChangeCallback); empty stays empty so the cue
+    '     banner can show. ---
+    bNumericOnly    as boolean = false
+    nDecimalPlaces  as integer = 2
     ' TRUE while the control itself writes to the RichEdit; EN_CHANGE is dropped so
     ' programmatic changes never reach the ChangeCallback.
     bInternalChange as boolean = false
@@ -134,6 +143,15 @@ declare sub      CTextBox_SetPasswordChar( byval hTextBoxControl as HWND, byval 
 ' a mouse click still places the caret). Default false.
 declare function CTextBox_GetSelectOnFocus( byval hTextBoxControl as HWND ) as boolean
 declare sub      CTextBox_SetSelectOnFocus( byval hTextBoxControl as HWND, byval bSelect as boolean )
+' Numeric input mode (see the TYPE field comment for the accepted grammar). DecimalPlaces
+' 0 means integers only. GetValue/SetValue trade the text as a double; SetValue formats
+' to DecimalPlaces and, like every programmatic setter, is silent.
+declare function CTextBox_GetNumericMode( byval hTextBoxControl as HWND ) as boolean
+declare sub      CTextBox_SetNumericMode( byval hTextBoxControl as HWND, byval bEnable as boolean )
+declare function CTextBox_GetDecimalPlaces( byval hTextBoxControl as HWND ) as integer
+declare sub      CTextBox_SetDecimalPlaces( byval hTextBoxControl as HWND, byval nPlaces as integer )
+declare function CTextBox_GetValue( byval hTextBoxControl as HWND ) as double
+declare function CTextBox_SetValue( byval hTextBoxControl as HWND, byval nValue as double ) as boolean
 declare sub      CTextBox_Cut( byval hTextBoxControl as HWND )
 declare sub      CTextBox_Copy( byval hTextBoxControl as HWND )
 declare sub      CTextBox_Paste( byval hTextBoxControl as HWND )

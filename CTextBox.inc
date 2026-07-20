@@ -128,6 +128,48 @@ end sub
 
 
 ' ========================================================================================
+' Format a numeric value with the specified decimal places. Ported from tracks'
+' AfxMoney and renamed (it never was an AfxNova function). bUseComma inserts thousands
+' separators; the control itself always formats WITHOUT them, since "," is not an
+' accepted input character.
+' ========================================================================================
+private function CTextBox_FormatNumeric( byval nValue as double, byval nDecimalPlaces as integer, byval bUseComma as boolean ) as DWSTRING
+    dim as string fmt = "0"
+    if bUseComma then fmt = "#,##" & fmt
+    if nDecimalPlaces > 0 then fmt = fmt & "." & string(nDecimalPlaces, "0")
+    return format( nValue, fmt )
+end function
+
+
+' ========================================================================================
+' Is wszText acceptable as (possibly partial) numeric input? Grammar: optional leading
+' minus, digits, at most one period followed by at most nDecimalPlaces digits (no
+' period at all when nDecimalPlaces = 0). Empty and "-" are valid intermediate states.
+' Used to vet a paste before it lands.
+' ========================================================================================
+private function CTextBox_IsValidNumericText( byval pTextBox as CTEXTBOX ptr, byref wszText as DWSTRING ) as boolean
+    dim as integer periodAt = 0
+    for i as integer = 1 to len(wszText)
+        select case asc(mid(wszText, i, 1))
+            case asc("0") to asc("9")
+            case asc("-")
+                if i <> 1 then return false
+            case asc(".")
+                if pTextBox->nDecimalPlaces = 0 then return false
+                if periodAt > 0 then return false
+                periodAt = i
+            case else
+                return false
+        end select
+    next
+    if periodAt > 0 then
+        if (len(wszText) - periodAt) > pTextBox->nDecimalPlaces then return false
+    end if
+    return true
+end function
+
+
+' ========================================================================================
 ' Retrieve the RichEdit child's handle. Escape hatch for RichEdit-specific messages the
 ' flat API and the forwarded EM_ range do not cover.
 ' ========================================================================================
@@ -307,6 +349,50 @@ sub CTextBox_SetSelectOnFocus( byval hTextBoxControl as HWND, byval bSelect as b
     if pTextBox = null then exit sub
     pTextBox->bSelectOnFocus = bSelect
 end sub
+
+
+' ========================================================================================
+' Numeric input mode.
+' ========================================================================================
+function CTextBox_GetNumericMode( byval hTextBoxControl as HWND ) as boolean
+    dim as CTEXTBOX ptr pTextBox = GetTextBoxPointer(hTextBoxControl)
+    if pTextBox = null then return false
+    return pTextBox->bNumericOnly
+end function
+
+sub CTextBox_SetNumericMode( byval hTextBoxControl as HWND, byval bEnable as boolean )
+    dim as CTEXTBOX ptr pTextBox = GetTextBoxPointer(hTextBoxControl)
+    if pTextBox = null then exit sub
+    pTextBox->bNumericOnly = bEnable
+end sub
+
+function CTextBox_GetDecimalPlaces( byval hTextBoxControl as HWND ) as integer
+    dim as CTEXTBOX ptr pTextBox = GetTextBoxPointer(hTextBoxControl)
+    if pTextBox = null then return 0
+    return pTextBox->nDecimalPlaces
+end function
+
+sub CTextBox_SetDecimalPlaces( byval hTextBoxControl as HWND, byval nPlaces as integer )
+    dim as CTEXTBOX ptr pTextBox = GetTextBoxPointer(hTextBoxControl)
+    if pTextBox = null then exit sub
+    if nPlaces < 0 then nPlaces = 0
+    pTextBox->nDecimalPlaces = nPlaces
+end sub
+
+' The current text as a double (val of the text; empty/"-"/"." read as 0).
+function CTextBox_GetValue( byval hTextBoxControl as HWND ) as double
+    dim as CTEXTBOX ptr pTextBox = GetTextBoxPointer(hTextBoxControl)
+    if pTextBox = null then return 0
+    return val( RichEdit_GetText( pTextBox->hRichEdit ) )
+end function
+
+' Set the text from a double, formatted to DecimalPlaces. Programmatic: silent.
+function CTextBox_SetValue( byval hTextBoxControl as HWND, byval nValue as double ) as boolean
+    dim as CTEXTBOX ptr pTextBox = GetTextBoxPointer(hTextBoxControl)
+    if pTextBox = null then return false
+    return CTextBox_SetText( hTextBoxControl, _
+                CTextBox_FormatNumeric( nValue, pTextBox->nDecimalPlaces, false ) )
+end function
 
 
 ' ========================================================================================
@@ -668,6 +754,64 @@ function CTextBoxRichEdit_SubclassProc ( _
             if _wParam = 13 then return 0
             ' Tab is navigation (handled on WM_KEYDOWN below), never a character.
             if _wParam = 9 then return 0
+            ' ESCAPE would beep; a host acts on it via the MessageCallback if at all.
+            if _wParam = 27 then return 0
+
+            ' Numeric mode: filter printable characters (ported from tracks'
+            ' NumericTextBox_SubclassProc, tightened). Control characters below 32
+            ' (backspace, Ctrl+C/V/X/Z/A...) always pass -- the tracks version blocked
+            ' them, which broke clipboard shortcuts. Paste itself is vetted in WM_PASTE.
+            if (pTextBox <> null) andalso (_wParam >= 32) then
+                if pTextBox->bNumericOnly then
+                    ' Work against the text as it will be AFTER the pending selection is
+                    ' replaced: caret position + remaining text decide validity.
+                    dim as DWORD dwStart, dwEnd
+                    SendMessage( hWin, EM_GETSEL, cast(WPARAM, @dwStart), cast(LPARAM, @dwEnd) )
+                    dim as DWSTRING wszText = RichEdit_GetText( hWin )
+                    if dwEnd > dwStart then
+                        wszText = left(wszText, dwStart) & mid(wszText, dwEnd + 1)
+                    end if
+
+                    select case _wParam
+                        case asc("0") to asc("9")
+                            ' Nothing may land in front of an existing leading minus.
+                            if (dwStart = 0) andalso (left(wszText, 1) = "-") then return 0
+                            ' In the fractional part, respect the decimal-places limit.
+                            dim as integer foundat = instr( wszText, "." )
+                            if (foundat > 0) andalso (dwStart >= foundat) then
+                                if len(mid(wszText, foundat + 1)) >= pTextBox->nDecimalPlaces then return 0
+                            end if
+                        case asc(".")
+                            if pTextBox->nDecimalPlaces = 0 then return 0
+                            if instr( wszText, "." ) > 0 then return 0
+                            if (dwStart = 0) andalso (left(wszText, 1) = "-") then return 0
+                            ' Everything right of the caret becomes the fractional part.
+                            if (len(wszText) - dwStart) > pTextBox->nDecimalPlaces then return 0
+                        case asc("-")
+                            if dwStart <> 0 then return 0
+                            if instr( wszText, "-" ) > 0 then return 0
+                        case else
+                            return 0
+                    end select
+                end if
+            end if
+
+        case WM_PASTE
+            ' Numeric mode: vet the paste by building the prospective text. Rejected
+            ' wholesale if the result would be invalid -- nothing is half-pasted.
+            if (pTextBox <> null) andalso (pTextBox->bNumericOnly = true) then
+                dim as DWSTRING wszClip = AfxGetClipboardText()
+                ' A single-line control keeps only the first pasted line; mirror that
+                ' before validating.
+                dim as integer nEol = instr( wszClip, wchr(13) )
+                if nEol = 0 then nEol = instr( wszClip, wchr(10) )
+                if nEol > 0 then wszClip = left( wszClip, nEol - 1 )
+                dim as DWORD dwStart, dwEnd
+                SendMessage( hWin, EM_GETSEL, cast(WPARAM, @dwStart), cast(LPARAM, @dwEnd) )
+                dim as DWSTRING wszText = RichEdit_GetText( hWin )
+                dim as DWSTRING wszProspective = left(wszText, dwStart) & wszClip & mid(wszText, dwEnd + 1)
+                if CTextBox_IsValidNumericText( pTextBox, wszProspective ) = false then return 0
+            end if
 
         case WM_KEYDOWN
             if _wParam = VK_RETURN then
@@ -692,6 +836,23 @@ function CTextBoxRichEdit_SubclassProc ( _
             end if
 
         case WM_SETFOCUS, WM_KILLFOCUS
+            ' Numeric mode: on focus loss reformat the value to exactly DecimalPlaces
+            ' ("5." -> "5.00"), silently. Runs before the FocusCallback so the host
+            ' reads the formatted text. Empty stays empty -- the cue banner shows.
+            if (uMsg = WM_KILLFOCUS) andalso (pTextBox <> null) then
+                if pTextBox->bNumericOnly then
+                    dim as DWSTRING wszText = RichEdit_GetText( hWin )
+                    if len(wszText) > 0 then
+                        dim as DWSTRING wszFormatted = _
+                            CTextBox_FormatNumeric( val(wszText), pTextBox->nDecimalPlaces, false )
+                        if wszFormatted <> wszText then
+                            pTextBox->bInternalChange = true
+                            SendMessage( hWin, WM_SETTEXT, 0, cast(LPARAM, wszFormatted.vptr) )
+                            pTextBox->bInternalChange = false
+                        end if
+                    end if
+                end if
+            end if
             if (pTextBox <> null) andalso (pTextBox->FocusCallback <> null) then
                 pTextBox->FocusCallback( hCtrl, (uMsg = WM_SETFOCUS) )
             end if

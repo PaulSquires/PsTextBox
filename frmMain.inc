@@ -45,7 +45,7 @@ function frmMain_OnPaint( byval hwnd as HWND ) as LRESULT
 
     SetRect( @rcText, pWindow->ScaleX(DEMO_LEFT), pWindow->ScaleY(DEMO_BOX3_TOP - 22), _
              rc.right, pWindow->ScaleY(DEMO_BOX3_TOP) )
-    b.PaintText( "Password char, 8-character limit, borderless:", @rcText, DT_LEFT )
+    b.PaintText( "Numeric only, 2 decimal places, formats on focus loss, borderless:", @rcText, DT_LEFT )
 
     if len(gwszLastEvent) then
         SetRect( @rcText, pWindow->ScaleX(DEMO_LEFT), rc.bottom - pWindow->ScaleY(30), _
@@ -248,18 +248,19 @@ function frmMain_Show( byval hWndParent as HWND ) as LRESULT
     print s
     SendMessage( hCtl, EM_SETSEL, 0, 9 )    ' select "Read-only" through the same door
 
-    ' --- Textbox 3: password char, 8-character limit, borderless. ---------------------
+    ' --- Textbox 3: numeric-only (2 decimal places), borderless. ----------------------
     hCtl = CTextBox_Create( HWND_FRMMAIN, IDC_FRMMAIN_TEXTBOX3 )
     CTextBox_SetFont( hCtl, ghFont(GUIFONT_10) )
     CTextBox_SetForeColor( hCtl, theme.ForeColor )
     CTextBox_SetBackColor( hCtl, theme.BackColorBox )
     CTextBox_SetBorderWidth( hCtl, 0 )
     CTextBox_SetOuterBackColor( hCtl, theme.BackColorWindow )
-    CTextBox_SetCueBannerText( hCtl, "PIN (max 8)" )
+    CTextBox_SetCueBannerText( hCtl, "Amount (digits, minus, one decimal)" )
     CTextBox_SetCueBannerColor( hCtl, theme.ForeColorCue )
     CTextBox_SetMargins( hCtl, pWindow->ScaleX(8), pWindow->ScaleX(8) )
-    CTextBox_SetLimitText( hCtl, 8 )
-    CTextBox_SetPasswordChar( hCtl, asc("*") )
+    CTextBox_SetNumericMode( hCtl, true )
+    CTextBox_SetDecimalPlaces( hCtl, 2 )
+    CTextBox_SetSelectOnFocus( hCtl, true )    ' tab in, type a fresh amount
 
     frmMain_PositionTextBoxes( HWND_FRMMAIN )
 
