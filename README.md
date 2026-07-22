@@ -17,7 +17,9 @@ Any number of instances can coexist; each owns all of its state.
   (`ES_AUTOHSCROLL`)
 - Dedicated **event callbacks** (change / focus / Enter / scroll-changed) plus the
   sibling-standard observe-with-veto message callback
-- Built-in, localizable right-click **Cut/Copy/Paste/Select All menu**
+- Built-in, localizable right-click **Cut/Copy/Paste/Select All menu**, drawn by
+  **CPopupMenu** so it can be themed to match the host's other menus (see *Context menu*
+  — it needs one line in your message pump)
 - Optional **multiline mode** (`CTextBox_Create(..., true)`) — word wrap, ENTER inserts
   a newline, TAB inserts a tab character, no native scrollbar: an external scrollbar
   (CVScrollBar) is driven through `ScrollChangedCallback` / `CTextBox_GetVScrollInfo` /
@@ -40,16 +42,21 @@ Any number of instances can coexist; each owns all of its state.
 | File | Purpose |
 |---|---|
 | `CTextBox.bi` / `.inc` | The control. `CTextBox.bi` is the documented public header. |
+| `CPopupMenu.bi` / `.inc` | The right-click menu (vendored from `C:\dev\CMenuBar`, its canonical home — sync from there, don't edit here) |
 | `clsDoubleBuffer.bi` / `.inc` | Flicker-free drawing helper (chrome painting) |
 | `main.bas`, `frmMain.bi` / `.inc` | Demo / test harness (five instances, incl. two multiline; `CTEXTBOX_SMOKE=1` runs the startup asserts and exits) |
 
 `CTextBox.bi` pulls in `AfxNova\AfxRichEdit.inc` itself (RichEdit definitions and
-helpers). Include order:
+helpers) and `CPopupMenu.bi`. Include order:
 
 ```freebasic
 #include once "clsDoubleBuffer.inc"
+#include once "CPopupMenu.inc"
 #include once "CTextBox.inc"
 ```
+
+An app already hosting `CMenuBar` has `CPopupMenu.inc` included once already — that is
+the same file, so nothing is duplicated.
 
 ## Quick start
 
@@ -129,6 +136,39 @@ eligible = no menu). Localize the labels with
 `CTextBox_SetMenuText( hBox, "Ausschneiden", "Kopieren", "Einfügen", "Alles auswählen" )`
 — the fourth argument is optional; empty keeps the current Select All label. The
 MessageCallback sees `WM_CONTEXTMENU` first — return TRUE to suppress or replace it.
+
+The menu is a **CPopupMenu** (vendored from `C:\dev\CMenuBar`), not `TrackPopupMenu` —
+owner-drawn, so it can be themed to match the rest of your menus instead of showing a
+native grey menu in the middle of a dark UI.
+
+**This puts one obligation on the host, and it is not optional.** A CPopupMenu is *not*
+modal: keyboard navigation and dismissal on an outside click both live in a message
+filter. Skip the filter and the menu opens and paints, but arrow keys do nothing and it
+never closes when you click elsewhere.
+
+```freebasic
+do while GetMessage(@uMsg, null, 0, 0)
+    if CTextBox_FilterMessage( @uMsg ) then continue do
+    TranslateMessage @uMsg
+    DispatchMessage @uMsg
+loop
+```
+
+One call serves every CTextBox in the application — only one menu chain can be open at a
+time and the filter finds it. An app that also hosts `CMenuBar` calls that filter too;
+the two are independent and each stands down while the other's menu is up.
+
+Styling is yours: `CTextBox_GetContextMenu( hBox )` returns the popup, so the usual
+`CPopupMenu_SetColors` / `SetFonts` / `SetGlyphs` / `SetItemHeight` apply. The handle is
+stable for the control's lifetime, so theme it once after `CTextBox_Create` — labels are
+rebuilt per open, colors and fonts are not. Left alone it renders with CPopupMenu's own
+defaults. `CTextBox_CloseContextMenu()` dismisses an open menu (silently) for hosts with
+a global "close every menu" moment, such as app deactivation.
+
+> **Upgrading:** this replaced an inline `TrackPopupMenu` that ran the commands in the
+> same stack frame as `WM_CONTEXTMENU`. They now run from the popup's select callback,
+> after the menu closes. Existing hosts must add the `CTextBox_FilterMessage` line and
+> include `CPopupMenu.inc`.
 
 ## Multiline mode
 

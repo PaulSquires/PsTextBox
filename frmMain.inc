@@ -390,6 +390,10 @@ function frmMain_Show( byval hWndParent as HWND ) as LRESULT
     ' control handles VK_TAB itself (GetNextDlgTabItem), no dialog loop needed.
     do while GetMessage(@uMsg, null, 0, 0)
         if uMsg.message = WM_QUIT then exit do
+        ' MANDATORY once a CTextBox is on screen: its right-click menu is a CPopupMenu,
+        ' which is not modal -- keyboard navigation and dismissal on an outside click
+        ' both live in this filter. One call covers every textbox in the app.
+        if CTextBox_FilterMessage( @uMsg ) then continue do
         TranslateMessage @uMsg    ' Translates virtual-key messages into character messages.
         DispatchMessage @uMsg     ' Dispatches a message to a window procedure.
     loop  ' message loop
