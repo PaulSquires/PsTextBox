@@ -42,6 +42,7 @@ dim shared theme as THEME_TYPE
 
 
 #include once "clsDoubleBuffer.inc"
+#include once "CPopupMenu.inc"    ' CTextBox's built-in right-click menu runs on it
 #include once "CTextBox.inc"
 #include once "frmMain.inc"
 
