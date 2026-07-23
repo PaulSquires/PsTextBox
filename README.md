@@ -43,14 +43,14 @@ Any number of instances can coexist; each owns all of its state.
 |---|---|
 | `CTextBox.bi` / `.inc` | The control. `CTextBox.bi` is the documented public header. |
 | `CPopupMenu.bi` / `.inc` | The right-click menu (vendored from `C:\dev\CMenuBar`, its canonical home — sync from there, don't edit here) |
-| `clsDoubleBuffer.bi` / `.inc` | Flicker-free drawing helper (chrome painting) |
+| `CBufferPaint.bi` / `.inc` | Flicker-free drawing helper (chrome painting) |
 | `main.bas`, `frmMain.bi` / `.inc` | Demo / test harness (five instances, incl. two multiline; `CTEXTBOX_SMOKE=1` runs the startup asserts and exits) |
 
 `CTextBox.bi` pulls in `AfxNova\AfxRichEdit.inc` itself (RichEdit definitions and
 helpers) and `CPopupMenu.bi`. Include order:
 
 ```freebasic
-#include once "clsDoubleBuffer.inc"
+#include once "CBufferPaint.inc"
 #include once "CPopupMenu.inc"
 #include once "CTextBox.inc"
 ```
