@@ -15,6 +15,8 @@ Any number of instances can coexist; each owns all of its state.
   corners**, and a settable outer fill so the corners blend into the host background
 - **Left/right margins** (`EM_SETMARGINS`) and automatic horizontal scroll
   (`ES_AUTOHSCROLL`)
+- **Horizontal alignment** (`CTextBox_SetTextAlign` — left / centre / right). Set it at
+  setup time; see *Text alignment* below for the reason, which is not a style preference
 - Dedicated **event callbacks** (change / focus / Enter / scroll-changed) plus the
   sibling-standard observe-with-veto message callback
 - Built-in, localizable right-click **Cut/Copy/Paste/Select All menu**, drawn by
@@ -106,6 +108,9 @@ CTextBox_SetEnterPressedCallback( hBox, @MyEnterCallback )
   EnterPressedCallback; a multiline paste keeps only what fits on one line. Multiline:
   ENTER and TAB are ordinary editing keys, text starts at the top (no vertical
   centering), and the EnterPressedCallback never fires.
+- **Text alignment is a setup-time decision.** `CTextBox_SetTextAlign` works at any point,
+  but applying it rewrites the buffer and therefore discards the undo history — see
+  *Text alignment* below. Set it before the control has content and it costs nothing.
 - **Fonts are caller-owned.** The control converts the text `HFONT` to a `CHARFORMATW`
   (face, size, charset, bold/italic/underline/strikeout + forecolor) internally and
   re-derives vertical centering on every size or font change. It never deletes an HFONT.
@@ -117,6 +122,35 @@ CTextBox_SetEnterPressedCallback( hBox, @MyEnterCallback )
   (`GetNextDlgTabItem`, Shift+Tab for backwards) — so tabbing between controls works
   even without `IsDialogMessage` in the host's loop. Veto `VK_TAB` in the
   MessageCallback to repurpose Tab (e.g. to drive a picker list).
+
+## Text alignment
+
+```freebasic
+CTextBox_SetTextAlign( hBox, TXT_ALIGN_CENTER )   ' or _LEFT (default) / _RIGHT
+```
+
+Applies to the whole buffer, in both line modes, and survives every subsequent `SetText`.
+Centring happens between the **margins**, not between the border edges, so give the control
+equal margins if you want it optically centred.
+
+**Set it before the control has content.** That is not a style preference — it is the shape
+of a genuine RichEdit constraint, and the implementation is built around it:
+
+> `TM_PLAINTEXT` **refuses `EM_SETPARAFORMAT`**. Measured, not assumed: the message returns
+> failure every time, in both line modes, with and without a selection, with the buffer
+> empty and with content. The paragraph format simply stays `PFA_LEFT` and *nothing reports
+> a problem*. The same message sent while the control is in `TM_RICHTEXT` succeeds — and the
+> resulting format then survives the switch back to plain text and every later `SetText`.
+
+Plain-text mode is not negotiable here: it is what keeps one character format across the
+whole buffer and what makes pasted text shed its rich formatting. So `SetTextAlign` empties
+the buffer, flips to rich-text mode, applies the format, flips back, and restores the text.
+On an empty control that costs nothing. On a control the user has been typing into, **it
+discards the undo history**.
+
+Two assertions in the harness guard this, and one of them is stated as a negative: that a
+direct `EM_SETPARAFORMAT` is still *refused*. If that ever starts passing, the buffer-rewrite
+can be deleted.
 
 ## Callbacks
 

@@ -288,6 +288,11 @@ function frmMain_Show( byval hWndParent as HWND ) as LRESULT
     CTextBox_SetDecimalPlaces( hCtl, 2 )
     CTextBox_SetSelectOnFocus( hCtl, true )    ' tab in, type a fresh amount
     CTextBox_SetZeroWhenEmpty( hCtl, true )    ' shows 0.00 instead of the cue
+    ' Centred, which is the case CNumericUpDown needed this setter for: a number in a
+    ' spinner reads wrong left-aligned. Watch it stay centred while you type, and after the
+    ' reformat that focus loss applies -- that reformat replaces the whole buffer, which is
+    ' exactly what the alignment has to survive.
+    CTextBox_SetTextAlign( hCtl, TXT_ALIGN_CENTER )
 
     ' --- Textbox 4: MULTILINE, editable. ENTER inserts a newline (no EnterPressed
     '     event exists in multiline), TAB inserts a tab character, the cue banner
@@ -359,6 +364,81 @@ function frmMain_Show( byval hWndParent as HWND ) as LRESULT
     s = "ASSERT GetMultiline box4/box1 = true/false: " & _
         iif( (bMulti4 = true) andalso (bMulti1 = false), "[ok]", "[FAIL]" )
     print s
+
+    ' --- Text alignment ------------------------------------------------------------------
+    ' Box 3 was set to CENTER; box 1 was never touched, so it must still be LEFT -- which is
+    ' the whole claim that adding this setter changed nothing for existing hosts.
+    dim as HWND hNum  = GetDlgItem( HWND_FRMMAIN, IDC_FRMMAIN_TEXTBOX3 )
+    dim as HWND hPlain = GetDlgItem( HWND_FRMMAIN, IDC_FRMMAIN_TEXTBOX1 )
+    s = "ASSERT default alignment is LEFT: got " & CTextBox_GetTextAlign(hPlain) & _
+        iif( CTextBox_GetTextAlign(hPlain) = TXT_ALIGN_LEFT, "  [ok]", "  [FAIL]" )
+    print s
+    s = "ASSERT SetTextAlign(CENTER) round-trips: got " & CTextBox_GetTextAlign(hNum) & _
+        iif( CTextBox_GetTextAlign(hNum) = TXT_ALIGN_CENTER, "  [ok]", "  [FAIL]" )
+    print s
+
+    ' Ask the RICHEDIT what it actually thinks, rather than believing our own stored field:
+    ' the whole point of this feature is the message that reached the child, so the child is
+    ' the only witness worth asking.
+    dim pfChk as PARAFORMAT
+    pfChk.cbSize = sizeof(PARAFORMAT)
+    RichEdit_GetParaFormat( CTextBox_GetRichEditHandle(hNum), @pfChk )
+    s = "ASSERT the RichEdit really is centred: wAlignment=" & pfChk.wAlignment & _
+        iif( pfChk.wAlignment = PFA_CENTER, "  [ok]", "  [FAIL]" )
+    print s
+
+    ' THE ASSERTION THIS FEATURE EXISTS FOR. A paragraph format belongs to the paragraph the
+    ' text lives in, and SetText replaces the whole buffer -- so without the central
+    ' re-application in the subclass's WM_SETTEXT handler, the alignment would silently
+    ' revert here and nothing but a human looking at the pixels would notice.
+    CTextBox_SetText( hNum, "1234.56" )
+    pfChk.cbSize = sizeof(PARAFORMAT)
+    RichEdit_GetParaFormat( CTextBox_GetRichEditHandle(hNum), @pfChk )
+    s = "ASSERT alignment SURVIVES a SetText: wAlignment=" & pfChk.wAlignment & _
+        iif( pfChk.wAlignment = PFA_CENTER, "  [ok]", "  [FAIL]" )
+    print s
+    CTextBox_SetText( hNum, "" )
+
+    ' THE ASSERTION THE IMPLEMENTATION EXISTS FOR, stated as the negative. A plain
+    ' EM_SETPARAFORMAT -- the obvious way to do this, and the way it was first written --
+    ' FAILS under TM_PLAINTEXT and fails SILENTLY, leaving the alignment at LEFT. If this
+    ' ever starts succeeding, CTextBox_ApplyParaFormat's buffer-rewriting dance is no longer
+    ' necessary and should be deleted.
+    dim pfDirect as PARAFORMAT
+    pfDirect.cbSize = sizeof(PARAFORMAT)
+    pfDirect.dwMask = PFM_ALIGNMENT
+    pfDirect.wAlignment = PFA_RIGHT
+    dim as LRESULT rcDirect = SendMessage( CTextBox_GetRichEditHandle(hNum), _
+                                           EM_SETPARAFORMAT, 0, cast(LPARAM, @pfDirect) )
+    s = "ASSERT a direct EM_SETPARAFORMAT is REFUSED under TM_PLAINTEXT: ret=" & rcDirect & _
+        iif( rcDirect = 0, "  [ok]", "  [FAIL - the dance may now be unnecessary]" )
+    print s
+
+    ' Multiline relies on paragraph INHERITANCE: the restored text is typed into the one
+    ' formatted paragraph and each new paragraph inherits the previous one's format. Asserted
+    ' on a real multiline control with real content rather than trusted.
+    dim as HWND hMultiAlign = GetDlgItem( HWND_FRMMAIN, IDC_FRMMAIN_TEXTBOX5 )
+    CTextBox_SetReadOnly( hMultiAlign, false )
+    CTextBox_SetTextAlign( hMultiAlign, TXT_ALIGN_RIGHT )
+    pfChk.cbSize = sizeof(PARAFORMAT)
+    RichEdit_GetParaFormat( CTextBox_GetRichEditHandle(hMultiAlign), @pfChk )
+    s = "ASSERT multiline alignment applies with content present: wAlignment=" & pfChk.wAlignment & _
+        iif( pfChk.wAlignment = PFA_RIGHT, "  [ok]", "  [FAIL]" )
+    print s
+    ' ...and the content itself must have survived the rewrite the setter performs.
+    CTextBox_GetVScrollInfo( hMultiAlign, nTotal, nPage, nFirst )
+    s = "ASSERT the buffer survives SetTextAlign intact: lines=" & nTotal & _
+        iif( nTotal = 40, "  [ok]", "  [FAIL]" )
+    print s
+    ' Put it back the way the interactive pass expects it.
+    CTextBox_SetTextAlign( hMultiAlign, TXT_ALIGN_LEFT )
+    CTextBox_SetReadOnly( hMultiAlign, true )
+
+    CTextBox_SetTextAlign( hNum, 99 )
+    s = "ASSERT an out-of-range alignment falls back to LEFT: got " & CTextBox_GetTextAlign(hNum) & _
+        iif( CTextBox_GetTextAlign(hNum) = TXT_ALIGN_LEFT, "  [ok]", "  [FAIL]" )
+    print s
+    CTextBox_SetTextAlign( hNum, TXT_ALIGN_CENTER )    ' put it back for the interactive pass
 
     UpdateWindow( pWindow->hWindow )
     ShowWindow( pWindow->hWindow, SW_SHOW )
