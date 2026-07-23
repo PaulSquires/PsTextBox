@@ -1,271 +1,687 @@
 # CTextBox
 
-A reusable textbox custom control for FreeBASIC / Win32, built on AfxNova — single-line
-by default, optionally **multiline** (word-wrapped; a creation-time choice).
-The editing engine is a **RichEdit50W** child window wrapped in a `CWindow` container —
-RichEdit rather than EDIT because it supports vertically centered text (`EM_SETRECT`)
-and per-control colors (`EM_SETCHARFORMAT` / `EM_SETBKGNDCOLOR`) without owner-draw.
-Any number of instances can coexist; each owns all of its state.
+A textbox control for FreeBASIC Win32 applications: a themeable frame of your own colours —
+border, rounded corners, outer fill — wrapped around a real RichEdit50W editor that does the
+typing, the selection, the clipboard and the undo.
 
-- **Cue banner** with its own forecolor and (optionally) its own font, drawn whenever
-  the buffer is empty — focused or not, the caret blinks over it
-- One user-set **forecolor / backcolor** for all text (never per-character; the child
-  runs in `TM_PLAINTEXT` mode, so pasted text sheds any rich formatting)
-- **Border chrome**: width (0 = none), color, a separate focus color, small **rounded
-  corners**, and a settable outer fill so the corners blend into the host background
-- **Left/right margins** (`EM_SETMARGINS`) and automatic horizontal scroll
-  (`ES_AUTOHSCROLL`)
-- **Horizontal alignment** (`CTextBox_SetTextAlign` — left / centre / right). Set it at
-  setup time; see *Text alignment* below for the reason, which is not a style preference
-- Dedicated **event callbacks** (change / focus / Enter / scroll-changed) plus the
-  sibling-standard observe-with-veto message callback
-- Built-in, localizable right-click **Cut/Copy/Paste/Select All menu**, drawn by
-  **CPopupMenu** so it can be themed to match the host's other menus (see *Context menu*
-  — it needs one line in your message pump)
-- Optional **multiline mode** (`CTextBox_Create(..., true)`) — word wrap, ENTER inserts
-  a newline, TAB inserts a tab character, no native scrollbar: an external scrollbar
-  (CVScrollBar) is driven through `ScrollChangedCallback` / `CTextBox_GetVScrollInfo` /
-  `CTextBox_ScrollToLine` (see *Multiline mode* below)
-- Optional **select-all on focus** (`CTextBox_SetSelectOnFocus`) — selects everything
-  when focus arrives via Tab or a programmatic `SetFocus`; a mouse click still places
-  the caret at the click point
-- Optional **numeric-only mode** (`CTextBox_SetNumericMode`) — accepts digits, one
-  leading minus and one decimal separator, typed *or pasted*, with a configurable
-  number of decimal places (`CTextBox_SetDecimalPlaces`, 0 = integers only). On focus
-  loss the value is reformatted to exactly that many places (empty stays empty so the
-  cue can show — or set `CTextBox_SetZeroWhenEmpty` to display the formatted zero,
-  e.g. `0.00`, instead). `CTextBox_GetValue` / `CTextBox_SetValue` trade the text as
-  a double.
-- A **message door**: classic edit-control messages sent to the control are forwarded
-  to the RichEdit child
+It is the control you reach for when a plain `EDIT` gets you the behaviour but not the look. The
+frame is drawn by the control, so nothing about it depends on the visual style the user happens
+to be running, and every colour it paints is one you set. Inside the frame you get a cue banner
+with its own colour and font, vertically centred text on a single-line control, optional
+numeric-only input with a decimal-place limit, and a right-click menu that is itself an
+owner-drawn `CPopupMenu` you can theme to match the rest of your application.
 
-## Files
+Single-line by default. Pass `true` at creation for a multiline control: word wrap, ENTER
+inserts a newline, TAB inserts a tab character, and the wheel scrolls. A multiline control never
+shows a native scrollbar — it exposes its scroll state in **lines** instead, shaped to be wired
+straight to an external scrollbar.
+
+---
+
+## Requirements
+
+**Files to copy into your project:**
 
 | File | Purpose |
 |---|---|
-| `CTextBox.bi` / `.inc` | The control. `CTextBox.bi` is the documented public header. |
-| `CPopupMenu.bi` / `.inc` | The right-click menu (vendored from `C:\dev\CMenuBar`, its canonical home — sync from there, don't edit here) |
-| `CBufferPaint.bi` / `.inc` | Flicker-free drawing helper (chrome painting) |
-| `main.bas`, `frmMain.bi` / `.inc` | Demo / test harness (five instances, incl. two multiline; `CTEXTBOX_SMOKE=1` runs the startup asserts and exits) |
+| `CTextBox.bi` | Declarations — types, callbacks, constants, function prototypes |
+| `CTextBox.inc` | Implementation |
+| `CPopupMenu.bi` | The owner-drawn floating menu used for the built-in right-click menu |
+| `CPopupMenu.inc` | Its implementation |
+| `CBufferPaint.bi` | The flicker-free drawing surface the frame is painted through |
+| `CBufferPaint.inc` | Its implementation |
 
-`CTextBox.bi` pulls in `AfxNova\AfxRichEdit.inc` itself (RichEdit definitions and
-helpers) and `CPopupMenu.bi`. Include order:
+**AfxNova is required.** The control is built on `CWindow`, uses `AfxNova\AfxRichEdit.inc` for
+the `RichEdit_*` helpers and `AfxNova\AfxWin.inc` for clipboard access, and `CBufferPaint` draws
+through `AfxNova\CGdiPlus.inc`. Sources include AfxNova relative to the workspace root
+(`#include once "AfxNova\CWindow.inc"`), so builds need the workspace root on the include path:
+
+```bash
+fbc64.exe -i "C:\dev" main.bas
+```
+
+**Include order.** `CTextBox.bi` pulls in `CBufferPaint.bi` and `CPopupMenu.bi` itself, but the
+three implementation files must be included in dependency order:
 
 ```freebasic
 #include once "CBufferPaint.inc"
-#include once "CPopupMenu.inc"
+#include once "CPopupMenu.inc"    ' CTextBox's built-in right-click menu runs on it
 #include once "CTextBox.inc"
 ```
 
-An app already hosting `CMenuBar` has `CPopupMenu.inc` included once already — that is
-the same file, so nothing is duplicated.
-
-## Quick start
+**GDI+ must be running before the first repaint and must outlive the last one.** The frame is
+rendered through GDI+, so bracket your message loop:
 
 ```freebasic
-' Create, then position it like any window.
-dim as HWND hBox = CTextBox_Create( hWndParent, IDC_MYTEXTBOX )
-SetWindowPos( hBox, 0, x, y, cx, 32, SWP_NOZORDER or SWP_SHOWWINDOW )
-
-CTextBox_SetFont( hBox, hMyFont )                      ' you keep ownership
-CTextBox_SetForeColor( hBox, BGR(215,218,224) )
-CTextBox_SetBackColor( hBox, BGR(44,49,58) )
-
-CTextBox_SetCueBannerText( hBox, "Search anything..." )
-CTextBox_SetCueBannerColor( hBox, BGR(128,134,143) )   ' independent of the forecolor
-CTextBox_SetCueBannerFont( hBox, hItalicFont )         ' optional; defaults to the text font
-
-CTextBox_SetBorderColor( hBox, BGR(60,66,77) )
-CTextBox_SetFocusBorderColor( hBox, BGR(86,156,214) )  ' lights up while editing
-CTextBox_SetCornerRadius( hBox, pWindow->ScaleX(4) )   ' keep it small (plain GDI arcs)
-CTextBox_SetOuterBackColor( hBox, BGR(33,37,43) )      ' host background: corners blend in
-CTextBox_SetMargins( hBox, pWindow->ScaleX(8), pWindow->ScaleX(8) )
-
-CTextBox_SetChangeCallback( hBox, @MyChangeCallback )
-CTextBox_SetEnterPressedCallback( hBox, @MyEnterCallback )
+dim as ULONG_PTR gdipToken = AfxGdipInit()
+' ... create windows, run the message loop ...
+AfxGdipShutdown( gdipToken )
 ```
 
-## Concepts worth knowing
+`AfxGdipShutdown` must come after every window is destroyed, because each repaint builds and
+tears down a `CBufferPaint`. If you also call `CoInitialize`, shut GDI+ down before
+`CoUninitialize` — GDI+ leans on COM.
 
-- **The handle is the control.** `CTextBox_Create` returns a real `HWND` carrying the
-  `CtrlID` (`GetDlgItem` finds it). Position it with `SetWindowPos`; the RichEdit child
-  is derived geometry (inset by the border width) and is never positioned by the host.
-  `CTextBox_GetRichEditHandle` exists as an escape hatch for RichEdit-specific messages.
-  Keyboard focus sits on the child, so `GetFocus() = hBox` is always false — use
-  `CTextBox_HasFocus( hBox )` for focus tests.
-- **Programmatic setters are silent.** `SetText` / `ReplaceSel` / `Clear` (and a
-  forwarded `WM_SETTEXT`) never fire the ChangeCallback; only user edits do — typing,
-  cut/paste, undo. A host can safely call a setter from inside its own handler.
-- **The message door.** The container forwards the classic edit-message range
-  (`EM_GETSEL` .. `EM_GETIMESTATUS`) plus `WM_SETTEXT` / `WM_GETTEXT` /
-  `WM_GETTEXTLENGTH` / `WM_CUT` / `WM_COPY` / `WM_PASTE` / `WM_CLEAR` / `WM_UNDO`, so
-  `SendMessage( hBox, EM_SETSEL, 0, -1 )` works from a separate control or window.
-  One implementation, two doors: message for a separate control, function
-  (`CTextBox_SetSel` etc.) for an in-process host.
-- **The line mode is fixed at creation.** `ES_MULTILINE` cannot be toggled on a live
-  window, so `CTextBox_Create`'s `bMultiline` parameter decides it once. Single-line
-  (the default): ENTER is swallowed (no newline, no beep) and reported through the
-  EnterPressedCallback; a multiline paste keeps only what fits on one line. Multiline:
-  ENTER and TAB are ordinary editing keys, text starts at the top (no vertical
-  centering), and the EnterPressedCallback never fires.
-- **Text alignment is a setup-time decision.** `CTextBox_SetTextAlign` works at any point,
-  but applying it rewrites the buffer and therefore discards the undo history — see
-  *Text alignment* below. Set it before the control has content and it costs nothing.
-- **Fonts are caller-owned.** The control converts the text `HFONT` to a `CHARFORMATW`
-  (face, size, charset, bold/italic/underline/strikeout + forecolor) internally and
-  re-derives vertical centering on every size or font change. It never deletes an HFONT.
-- **No mouse capture.** The RichEdit manages its own selection-drag capture; the
-  container takes none, so the MessageCallback veto is honored uniformly — there is no
-  press state a suppressed message could strand.
-- **Tab navigation is built in.** The RichEdit child carries `WS_TABSTOP` and the
-  container `WS_EX_CONTROLPARENT`, and the control handles `VK_TAB` itself
-  (`GetNextDlgTabItem`, Shift+Tab for backwards) — so tabbing between controls works
-  even without `IsDialogMessage` in the host's loop. Veto `VK_TAB` in the
-  MessageCallback to repurpose Tab (e.g. to drive a picker list).
+**Never name an identifier `ok`.** GDI+ defines `Ok = 0` as a `Status` enum value in namespace
+`AfxNova`, and hosts customarily say `using AfxNova`. An existing variable, parameter or
+function called `ok` becomes a duplicate definition the moment you adopt these files. Use `bOK`
+instead.
 
-## Text alignment
+**`CTextBox_FilterMessage` in your message pump is mandatory.** The right-click menu is a
+`CPopupMenu`, which is not modal: its keyboard navigation and its dismissal on an outside click
+both live in that filter. Skip the call and the menu still opens and still paints, but it cannot
+be driven with the arrow keys or Enter, and it never closes when the user clicks elsewhere.
 
 ```freebasic
-CTextBox_SetTextAlign( hBox, TXT_ALIGN_CENTER )   ' or _LEFT (default) / _RIGHT
-```
-
-Applies to the whole buffer, in both line modes, and survives every subsequent `SetText`.
-Centring happens between the **margins**, not between the border edges, so give the control
-equal margins if you want it optically centred.
-
-**Set it before the control has content.** That is not a style preference — it is the shape
-of a genuine RichEdit constraint, and the implementation is built around it:
-
-> `TM_PLAINTEXT` **refuses `EM_SETPARAFORMAT`**. Measured, not assumed: the message returns
-> failure every time, in both line modes, with and without a selection, with the buffer
-> empty and with content. The paragraph format simply stays `PFA_LEFT` and *nothing reports
-> a problem*. The same message sent while the control is in `TM_RICHTEXT` succeeds — and the
-> resulting format then survives the switch back to plain text and every later `SetText`.
-
-Plain-text mode is not negotiable here: it is what keeps one character format across the
-whole buffer and what makes pasted text shed its rich formatting. So `SetTextAlign` empties
-the buffer, flips to rich-text mode, applies the format, flips back, and restores the text.
-On an empty control that costs nothing. On a control the user has been typing into, **it
-discards the undo history**.
-
-Two assertions in the harness guard this, and one of them is stated as a negative: that a
-direct `EM_SETPARAFORMAT` is still *refused*. If that ever starts passing, the buffer-rewrite
-can be deleted.
-
-## Callbacks
-
-| Callback | Fires |
-|---|---|
-| `TXT_ChangeCallbackSub` | after a USER edit changed the text (programmatic = silent) |
-| `TXT_FocusCallbackSub` | RichEdit gained / lost keyboard focus (border already repainted) |
-| `TXT_EnterPressedCallbackSub` | ENTER pressed (single-line only; the keypress itself is always swallowed) |
-| `TXT_MessageCallbackFunc` | key / mouse / focus / context-menu messages, before the control acts; return TRUE to suppress. Suppressing `WM_SETFOCUS` / `WM_KILLFOCUS` also suppresses the RichEdit's caret handling — only do that on purpose. |
-| `TXT_ScrollChangedCallbackSub` | multiline only: the vertical scroll state may have changed (typing, programmatic SetText, wheel/keys). Unlike the ChangeCallback it is NOT silenced for programmatic changes — a scrollbar must hear about those too. |
-
-## Context menu
-
-Right-click shows Cut / Copy / Paste / Select All, filtered by state (read-only offers
-Copy and Select All only; Select All appears whenever the control holds text; nothing
-eligible = no menu). Localize the labels with
-`CTextBox_SetMenuText( hBox, "Ausschneiden", "Kopieren", "Einfügen", "Alles auswählen" )`
-— the fourth argument is optional; empty keeps the current Select All label. The
-MessageCallback sees `WM_CONTEXTMENU` first — return TRUE to suppress or replace it.
-
-The menu is a **CPopupMenu** (vendored from `C:\dev\CMenuBar`), not `TrackPopupMenu` —
-owner-drawn, so it can be themed to match the rest of your menus instead of showing a
-native grey menu in the middle of a dark UI.
-
-**This puts one obligation on the host, and it is not optional.** A CPopupMenu is *not*
-modal: keyboard navigation and dismissal on an outside click both live in a message
-filter. Skip the filter and the menu opens and paints, but arrow keys do nothing and it
-never closes when you click elsewhere.
-
-```freebasic
-do while GetMessage(@uMsg, null, 0, 0)
+dim uMsg as MSG
+do while GetMessage( @uMsg, null, 0, 0 )
+    if uMsg.message = WM_QUIT then exit do
     if CTextBox_FilterMessage( @uMsg ) then continue do
     TranslateMessage @uMsg
     DispatchMessage @uMsg
 loop
 ```
 
-One call serves every CTextBox in the application — only one menu chain can be open at a
-time and the filter finds it. An app that also hosts `CMenuBar` calls that filter too;
-the two are independent and each stands down while the other's menu is up.
+One call serves every CTextBox in the application: only one menu chain can be open at a time and
+the filter finds it. An application that also hosts a `CMenuBar` calls that filter too; the two
+are independent and each stands down while the other's menu is up.
 
-Styling is yours: `CTextBox_GetContextMenu( hBox )` returns the popup, so the usual
-`CPopupMenu_SetColors` / `SetFonts` / `SetGlyphs` / `SetItemHeight` apply. The handle is
-stable for the control's lifetime, so theme it once after `CTextBox_Create` — labels are
-rebuilt per open, colors and fonts are not. Left alone it renders with CPopupMenu's own
-defaults. `CTextBox_CloseContextMenu()` dismisses an open menu (silently) for hosts with
-a global "close every menu" moment, such as app deactivation.
+**Tab navigation works without `IsDialogMessage`.** The control's container carries
+`WS_EX_CONTROLPARENT` and the RichEdit child inside it carries `WS_TABSTOP`, so the dialog
+manager can see through the container to the tabstop — but you do not need the dialog manager
+for the common case, because a single-line control handles `VK_TAB` itself (`GetNextDlgTabItem`
+against the top-level ancestor, Shift+Tab for the previous stop).
 
-> **Upgrading:** this replaced an inline `TrackPopupMenu` that ran the commands in the
-> same stack frame as `WM_CONTEXTMENU`. They now run from the popup's select callback,
-> after the menu closes. Existing hosts must add the `CTextBox_FilterMessage` line and
-> include `CPopupMenu.inc`.
+If you do add `IsDialogMessage`, know what it costs you here: it claims `VK_RETURN` and
+`VK_ESCAPE` before the control sees them, which defeats the `EnterPressedCallback` and any ESC
+handling you have put in the message callback. The bundled demo deliberately runs without it.
 
-## Multiline mode
+A **multiline** control inserts a tab character on TAB and never moves focus. If Tab must leave
+a multiline box, veto `WM_KEYDOWN` / `VK_TAB` in the message callback and move focus yourself.
 
-Create with `CTextBox_Create( hWndParent, CtrlID, true )`. The child gets
-`ES_MULTILINE or ES_AUTOVSCROLL or ES_WANTRETURN` and **no** `ES_AUTOHSCROLL`, so text
-word-wraps at the control width. No scrollbar styles are added — the control scrolls
-content but shows no native scrollbar, by design: pair it with an external themed
-scrollbar (CVScrollBar) through three pieces, all in LINE units:
+---
+
+## Quick start
 
 ```freebasic
-' 1. The control says "my scroll state may have changed" (fires on typing,
-'    programmatic SetText, wheel/keyboard scrolling):
-sub MyScrollChanged( byval hTextBox as HWND )
+' Create it. The control is created zero-sized and hidden.
+dim as HWND hCtl = CTextBox_Create( hWndParent, IDC_MYFORM_SEARCH )
+
+' Fonts are yours: the control never creates or deletes an HFONT.
+CTextBox_SetFont( hCtl, ghFont(GUIFONT_10) )
+CTextBox_SetForeColor( hCtl, theme.ForeColor )
+CTextBox_SetBackColor( hCtl, theme.BackColorBox )
+
+' Cue banner, shown whenever the buffer is empty. Its colour and font are its own.
+CTextBox_SetCueBannerText( hCtl, "Search anything..." )
+CTextBox_SetCueBannerColor( hCtl, theme.ForeColorCue )
+CTextBox_SetCueBannerFont( hCtl, ghFont(CUEFONT_10) )
+
+' Frame. Every pixel value is a raw device pixel: DPI-scale at the call site.
+CTextBox_SetBorderColor( hCtl, theme.BorderColor )
+CTextBox_SetFocusBorderColor( hCtl, theme.FocusAccent )
+CTextBox_SetCornerRadius( hCtl, pWindow->ScaleX(4) )
+CTextBox_SetOuterBackColor( hCtl, theme.BackColorWindow )   ' corners blend into the form
+CTextBox_SetMargins( hCtl, pWindow->ScaleX(8), pWindow->ScaleX(8) )
+
+' Events.
+CTextBox_SetChangeCallback( hCtl, @TextBox_ChangeCallback )
+CTextBox_SetEnterPressedCallback( hCtl, @TextBox_EnterPressedCallback )
+
+' Place it. SWP_SHOWWINDOW is required -- the control is created hidden.
+SetWindowPos( hCtl, 0, x, y, nWidth, nHeight, SWP_NOZORDER or SWP_SHOWWINDOW )
+```
+
+And the callbacks:
+
+```freebasic
+sub TextBox_ChangeCallback( byval hTextBox as HWND )
+    ' USER edits only -- typing, cut, paste, undo. CTextBox_SetText never lands here.
+    gFilter = CTextBox_GetText( hTextBox )
+end sub
+
+sub TextBox_EnterPressedCallback( byval hTextBox as HWND )
+    ' Single-line only. The keypress itself is always swallowed: no newline, no beep.
+    RunSearch( CTextBox_GetText( hTextBox ) )
+end sub
+```
+
+Plus the mandatory `CTextBox_FilterMessage` line in the message pump, shown above.
+
+That is the whole minimum. Everything below is refinement.
+
+---
+
+## Concepts
+
+### The handle is a real HWND
+
+`CTextBox_Create` returns an ordinary window handle, and every `CTextBox_*` function takes it. It
+is not an opaque type, so you can treat the control as the window it is — `SetWindowPos` to place
+and size it, `ShowWindow` to show it, `GetDlgItem` to find it by the `CtrlID` you passed at
+creation.
+
+### There is a real editor inside
+
+The control is a container window that owns the chrome and the geometry, plus a subclassed
+`RichEdit50W` child that does all the editing. RichEdit rather than `EDIT` because it supports
+vertical centring of the text (`EM_SETRECT`) and per-control colours (`EM_SETCHARFORMAT`,
+`EM_SETBKGNDCOLOR`) without owner-draw.
+
+Two consequences you will meet immediately:
+
+- **`GetFocus() = hTextBox` is always false.** Focus sits on the child. Use `CTextBox_HasFocus`.
+  Calling `SetFocus` on the container, or sending it `WM_SETFOCUS`, redirects focus to the child
+  for you.
+- **The child's geometry is derived, never assigned.** Its rect is the container's client rect
+  inset by the border width on all four sides. Resizing the control, or changing the border
+  width, recomputes it and re-applies the vertical centring and the margins.
+
+`CTextBox_GetRichEditHandle` is the escape hatch for RichEdit-specific messages the flat API and
+the message door below do not cover.
+
+### The message door
+
+Sending a classic edit-control message to the **control** works as if it were the edit control
+itself. The container forwards:
+
+| Sent to the control | Behaviour |
+|---|---|
+| `EM_GETSEL` … `EM_GETIMESTATUS` | Forwarded verbatim to the RichEdit |
+| `WM_GETTEXT`, `WM_GETTEXTLENGTH`, `WM_CUT`, `WM_COPY`, `WM_PASTE`, `WM_CLEAR`, `WM_UNDO` | Forwarded verbatim |
+| `WM_SETTEXT`, `EM_REPLACESEL` | Forwarded, and treated as programmatic — **no change callback fires** |
+| `EM_SETMARGINS` | Intercepted, so the values are stored and survive later geometry and font changes |
+| `WM_SETFONT` | Runs `CTextBox_SetFont` |
+| `WM_GETFONT` | Returns the stored text font |
+
+Same operation, two doors: the message for a separate control or window, the function for an
+in-process host.
+
+```freebasic
+dim as long n = SendMessage( hCtl, WM_GETTEXTLENGTH, 0, 0 )
+SendMessage( hCtl, EM_SETSEL, 0, 9 )
+```
+
+### It is created zero-sized and hidden
+
+`CTextBox_Create` gives the container the styles `WS_CHILD`, `WS_CLIPSIBLINGS` and
+`WS_CLIPCHILDREN`, with `WS_EX_CONTROLPARENT` as its extended style. `WS_VISIBLE` is deliberately
+absent, so a newly created control shows nothing until you size it. Include `SWP_SHOWWINDOW` in
+your `SetWindowPos` — and note that the RichEdit child is shown by the first resize, so a control
+that is never sized never displays its editor at all.
+
+### Single-line and multiline are different controls
+
+The choice is made at `CTextBox_Create` and is fixed for the control's lifetime — `ES_MULTILINE`
+cannot be toggled on a live window. What changes:
+
+| | Single-line | Multiline |
+|---|---|---|
+| Text layout | One line, vertically centred in the frame | Word-wrapped from the top, no vertical centring |
+| ENTER | Swallowed; fires `EnterPressedCallback` | Inserts a newline; the callback never fires |
+| TAB | Moves focus to the next / previous tabstop | Inserts a tab character |
+| Horizontal scroll | `ES_AUTOHSCROLL` | None — the text wraps instead |
+| Vertical scroll | n/a | Wheel, keys and caret; no native scrollbar |
+| Numeric mode | Available | **Refused** — `CTextBox_SetNumericMode` is a no-op |
+| Cue banner | One line, unclipped, on the centred baseline | Word-wrapped at the top left, clipped to the text rect |
+
+### Pixels, and who scales them
+
+**Every pixel value passed to this API is a raw device pixel.** Margins, border width and corner
+radius are all taken verbatim; the control never scales a caller's value. DPI-scale at the call
+site, typically `pWindow->ScaleX(...)` / `ScaleY(...)`.
+
+That is not an oversight: margins go straight into `EM_SETMARGINS`, so a control-side scale would
+both lie to anything reading `EM_GETMARGINS` and double-scale a host that had already scaled.
+
+### One format for the whole buffer
+
+The editor runs in `TM_PLAINTEXT` mode. That is what gives you one character format across the
+entire buffer — the control never colours individual characters — and what makes pasted text shed
+any rich formatting it arrived with.
+
+`CTextBox_SetFont` and `CTextBox_SetForeColor` are converted together into a single
+`CHARFORMATW` (face, size, charset, bold, italic, underline, strikeout, colour) and applied to
+the whole buffer with `SCF_ALL`. There is no way to format a run of characters differently, and
+that is by design.
+
+`TM_PLAINTEXT` is also the reason `CTextBox_SetTextAlign` is more expensive than it looks — see
+that function, and **Behaviour and limits**.
+
+### Programmatic changes are silent
+
+`CTextBox_SetText`, `CTextBox_ReplaceSel`, `CTextBox_Clear`, `CTextBox_SetValue`, the numeric
+reformat the control performs on focus loss, and a `WM_SETTEXT` or `EM_REPLACESEL` sent through
+the message door all leave the change callback alone. It reports **user** interaction — typing,
+cut, paste, undo — and nothing else, which means you can call a setter from inside your own
+change handler without recursing.
+
+The scroll-changed callback is the deliberate exception; see **Callbacks**.
+
+### The cue banner
+
+Drawn by the control whenever the buffer is empty, focused or not — the caret blinks over it. It
+is painted at the editor's formatting rect, so it sits exactly where typed text will appear,
+including the vertical centring on a single-line control. Its colour is independent of the text
+forecolor, and its font falls back to the text font when you do not set one.
+
+### The frame
+
+The container paints the outer fill across its whole client area first, then the rounded frame on
+top of it. The pixels outside the corner arcs keep showing the outer fill — pass your form's
+background colour to `CTextBox_SetOuterBackColor` and rounded corners blend into it instead of
+showing white.
+
+The border colour switches to the focus border colour while the editor has focus. A border width
+of 0 draws no border at all, and the child then fills the entire client area.
+
+### Lifetime
+
+The control frees itself when its window is destroyed, including the `CPopupMenu` window behind
+the right-click menu — that is a `WS_POPUP` window, not a child, so it would not go with the
+window tree otherwise. It owns no host resources: every `HFONT` you hand it stays yours to
+delete. Destroy the parent and you are done.
+
+---
+
+## Behaviour and limits
+
+Firm properties of the control, not settings:
+
+- **`CTextBox_SetTextAlign` discards the undo history on a control that already has content.**
+  Set it at setup time, before anything has been typed. `TM_PLAINTEXT` refuses `EM_SETPARAFORMAT`
+  outright and *silently*, so the only sequence the editor accepts is: save the text, empty the
+  buffer, switch to `TM_RICHTEXT`, apply the format, switch back, restore the text — and then
+  empty the undo buffer, because the undo stack now spans a rewrite the user never made. On an
+  empty control that costs nothing and nobody notices.
+- **The `CTextBox_FilterMessage` pump call is not optional.** Without it the right-click menu has
+  no keyboard navigation and never dismisses on an outside click.
+- **Multiline is a creation-time choice.** There is no setter, because `ES_MULTILINE` cannot be
+  toggled on a live window.
+- **Numeric mode is single-line only.** `CTextBox_SetNumericMode` returns without doing anything
+  on a multiline control, and the getter still reads FALSE afterwards.
+- **`EnterPressedCallback` is single-line only**, and the ENTER keypress is always swallowed
+  there — no newline, no beep — whether or not a callback is installed.
+- **ESCAPE is swallowed in both line modes**, because the editor would beep. Act on it, if you
+  want to, from the message callback.
+- **There is no horizontal scroll API.** A single-line control auto-scrolls horizontally on its
+  own (`ES_AUTOHSCROLL`); a multiline control wraps instead, so there is nothing to scroll.
+- **A multiline control never shows a native scrollbar.** No scrollbar styles are applied. Drive
+  an external one through `ScrollChangedCallback` / `CTextBox_GetVScrollInfo` /
+  `CTextBox_ScrollToLine`.
+- **The control implements multiline wheel scrolling itself**, converting the delta to
+  `EM_LINESCROLL` and honouring `SPI_GETWHEELSCROLLLINES` (including `WHEEL_PAGESCROLL`, which
+  scrolls a page per notch). The RichEdit's own wheel handling is bypassed entirely. Sub-notch
+  deltas from a high-precision wheel or trackpad accumulate, so a slow swipe scrolls smoothly
+  instead of doing nothing.
+- **No mouse capture is taken.** The RichEdit manages its own selection-drag capture internally,
+  which is why a message callback's return value is honoured uniformly — there is no invariant of
+  the control's that a suppressed message could strand.
+- **No per-character formatting.** One font and one forecolor for the whole buffer, guaranteed by
+  `TM_PLAINTEXT`.
+- **No vertical alignment setting.** A single-line control's text is always vertically centred; a
+  multiline control's always starts at the top.
+- **Alignment is measured between the margins, not between the border edges.** A centred value in
+  a control with lopsided margins sits off-centre by design. Give it equal margins if you want it
+  optically centred.
+- **An unrecognized alignment value falls back to `TXT_ALIGN_LEFT`** rather than being rejected,
+  so the control's alignment can never silently disagree with what the host thinks it set.
+- **The right-click menu is rebuilt on every open**, from the current selection, clipboard and
+  read-only state. When nothing qualifies — no selection, nothing to paste, no text — no menu
+  appears at all.
+- **Only one popup chain may be open per application.** A second textbox's menu closes the
+  first's.
+
+---
+
+## API reference
+
+### Creation
+
+| Function | Description |
+|---|---|
+| `CTextBox_Create( hWndParent, CtrlID, bMultiline = false ) as HWND` | Creates the control as a child of `hWndParent` and returns its window handle. `CtrlID` becomes the container's `GWLP_ID`, so `GetDlgItem` finds it. `bMultiline` is fixed for the control's lifetime. Created zero-sized and hidden — place it with `SetWindowPos` including `SWP_SHOWWINDOW`. |
+| `CTextBox_GetRichEditHandle( hTextBox ) as HWND` | The `RichEdit50W` child. For RichEdit-specific messages the flat API and the message door do not cover. |
+| `CTextBox_GetMultiline( hTextBox ) as boolean` | TRUE for a multiline control. Set at creation, never changes. |
+| `CTextBox_HasFocus( hTextBox ) as boolean` | TRUE when the editor owns the keyboard focus. **Use this** — focus lives on the child, so `GetFocus() = hTextBox` is always false. |
+
+### Text and content
+
+| Function | Description |
+|---|---|
+| `CTextBox_GetText( hTextBox ) as DWSTRING` | The whole buffer. |
+| `CTextBox_SetText( hTextBox, Text ) as boolean` | Replaces the whole buffer. **Silent** — no change callback. Returns FALSE only when the handle is not a CTextBox. |
+| `CTextBox_GetTextLength( hTextBox ) as integer` | Length in characters. |
+| `CTextBox_GetSelText( hTextBox ) as DWSTRING` | The selected text, `""` when there is no selection. |
+| `CTextBox_ReplaceSel( hTextBox, Text ) as boolean` | Replaces the selection, or inserts at the caret when there is none. **Silent**, but undoable. |
+| `CTextBox_Clear( hTextBox ) as boolean` | Empties the buffer. **Silent** — it is `CTextBox_SetText( h, "" )`. |
+
+### Selection
+
+Positions are 0-based character indices.
+
+| Function | Description |
+|---|---|
+| `CTextBox_GetSel( hTextBox, byref nStart, byref nEnd )` | The selection range. `nStart = nEnd` means a caret with nothing selected. Both come back 0 when the handle is not a CTextBox. |
+| `CTextBox_SetSel( hTextBox, nStart, nEnd )` | Sets the selection. `nEnd = -1` selects through the end of the text. |
+| `CTextBox_SelectAll( hTextBox )` | Selects everything — `CTextBox_SetSel( h, 0, -1 )`. |
+
+### Edit behaviour
+
+| Function | Description |
+|---|---|
+| `CTextBox_GetLimitText( hTextBox ) as integer` | The current text-length limit, in characters. |
+| `CTextBox_SetLimitText( hTextBox, nLimit )` | Sets the limit. 0 restores the default limit. |
+| `CTextBox_GetReadOnly( hTextBox ) as boolean` | Read-only state, read from the editor's `ES_READONLY` style. |
+| `CTextBox_SetReadOnly( hTextBox, bReadOnly ) as boolean` | Sets it; returns TRUE on success. A read-only control still allows selection, and its context menu still offers Copy and Select All. |
+| `CTextBox_GetModify( hTextBox ) as boolean` | The editor's modified flag — set by user edits, cleared by a `WM_SETTEXT`. |
+| `CTextBox_SetModify( hTextBox, bModified )` | Sets or clears that flag. |
+| `CTextBox_SetPasswordChar( hTextBox, wchChar )` | The character displayed in place of each typed one. **0 turns password mode off.** Repaints the editor. |
+| `CTextBox_GetSelectOnFocus( hTextBox ) as boolean` | Whether the control selects everything when it gains focus. Default FALSE. |
+| `CTextBox_SetSelectOnFocus( hTextBox, bSelect )` | Turns that on. It applies to Tab and to a programmatic `SetFocus`; a **mouse click still places the caret at the click point**, because the click's own caret placement runs after the focus change and wins. |
+| `CTextBox_GetMargins( hTextBox, byref nLeft, byref nRight )` | The stored left and right text margins, in pixels. |
+| `CTextBox_SetMargins( hTextBox, nLeft, nRight )` | Sets them (`EM_SETMARGINS`) and repaints. Raw pixels — DPI-scale at the call site. They are stored, so they survive later font and geometry changes, which re-apply them. |
+
+### Clipboard and undo
+
+| Function | Description |
+|---|---|
+| `CTextBox_Cut( hTextBox )` | Cuts the selection to the clipboard. |
+| `CTextBox_Copy( hTextBox )` | Copies the selection to the clipboard. |
+| `CTextBox_Paste( hTextBox )` | Pastes. **In numeric mode the paste is vetted first** and rejected wholesale if the result would not be a valid number — nothing is ever half-pasted. |
+| `CTextBox_CanPaste( hTextBox ) as boolean` | Whether the clipboard holds something the editor would accept. |
+| `CTextBox_Undo( hTextBox ) as boolean` | Undoes the last edit; TRUE if something was undone. |
+| `CTextBox_CanUndo( hTextBox ) as boolean` | Whether there is anything to undo. |
+
+These six drive the editor exactly as Ctrl+X / Ctrl+C / Ctrl+V / Ctrl+Z would, so unlike the
+text setters they are **not** silent — the change callback fires for them.
+
+### Numeric mode
+
+Single-line only. The accepted grammar is: an optional leading minus, digits, and at most one
+decimal point followed by at most `DecimalPlaces` fractional digits. Typing is filtered character
+by character against the text as it will be *after* the pending selection is replaced, and a
+paste is validated as a whole. Control characters below 32 always pass, so backspace and the
+Ctrl+C / V / X / Z / A shortcuts keep working.
+
+On focus loss a non-empty value is reformatted to exactly `DecimalPlaces` (`"5."` becomes
+`"5.00"`), silently, and before the focus callback runs — so a host reading the text there sees
+the formatted value. An empty box stays empty, and the cue banner shows, unless `ZeroWhenEmpty`
+is on.
+
+| Function | Description |
+|---|---|
+| `CTextBox_GetNumericMode( hTextBox ) as boolean` | Whether numeric filtering is on. Default FALSE. |
+| `CTextBox_SetNumericMode( hTextBox, bEnable )` | Turns it on or off. **A no-op on a multiline control** — the getter still reads FALSE afterwards. Does not reformat whatever is already in the box. |
+| `CTextBox_GetDecimalPlaces( hTextBox ) as integer` | The fractional-digit limit. Default 2. |
+| `CTextBox_SetDecimalPlaces( hTextBox, nPlaces )` | Sets it; clamped to a minimum of 0, where **0 means integers only** and the decimal point is rejected outright. Does not reformat existing text. |
+| `CTextBox_GetValue( hTextBox ) as double` | The text as a double. An empty box, `"-"` and `"."` all read as 0. |
+| `CTextBox_SetValue( hTextBox, nValue ) as boolean` | Sets the text from a double, formatted to `DecimalPlaces` and **without thousands separators** (a comma is not an accepted input character). **Silent.** |
+| `CTextBox_GetZeroWhenEmpty( hTextBox ) as boolean` | Whether an empty numeric box displays the formatted zero. Default FALSE. |
+| `CTextBox_SetZeroWhenEmpty( hTextBox, bEnable )` | Turns it on. Stamps `"0.00"` immediately if the box is in numeric mode, currently empty **and not focused** — a focused box is left alone because the user may be mid-entry, and its next focus loss will stamp it. It trumps the cue banner, which effectively never shows again once the box has been visited. |
+
+### Multiline and scrolling
+
+Units are **lines**, shaped 1:1 for an external scrollbar: on each `ScrollChangedCallback` read
+the three numbers and push them into the scrollbar's range, and wire the scrollbar's position
+callback back to `CTextBox_ScrollToLine`.
+
+| Function | Description |
+|---|---|
+| `CTextBox_GetVScrollInfo( hTextBox, byref nTotalLines, byref nLinesPerPage, byref nFirstVisibleLine )` | The whole vertical scroll state. `nLinesPerPage` is the formatting-rect height divided by the text font's line height (`tmHeight + tmExternalLeading`) — **a partial line at the bottom is not counted**. All three come back 0 when the control has no usable geometry yet, so call it after the control has been sized. A single-line control reports one total line and a first visible line of 0. |
+| `CTextBox_ScrollToLine( hTextBox, nLine )` | Scrolls so `nLine` (0-based) becomes the first visible line. Negative values are clamped to 0, the editor clamps overscroll at the other end, and a request for the line already at the top does nothing. |
+
+### Appearance
+
+All fonts are caller-owned `HFONT`s — the control never deletes one.
+
+| Function | Description |
+|---|---|
+| `CTextBox_GetFont( hTextBox ) as HFONT` | The text font. 0 means the stock `DEFAULT_GUI_FONT` is in use. |
+| `CTextBox_SetFont( hTextBox, hFont ) as boolean` | Sets it, rebuilds the character format for the whole buffer, redoes the single-line vertical centring, re-applies the margins and repaints. |
+| `CTextBox_GetForeColor( hTextBox ) as COLORREF` | The text colour. |
+| `CTextBox_SetForeColor( hTextBox, clr ) as COLORREF` | Sets it and re-applies the character format. **Returns the previous colour.** |
+| `CTextBox_GetBackColor( hTextBox ) as COLORREF` | The editor's background colour. |
+| `CTextBox_SetBackColor( hTextBox, clr ) as COLORREF` | Sets it (`EM_SETBKGNDCOLOR`) and repaints. **Returns the previous colour.** |
+| `CTextBox_GetCueBannerText( hTextBox ) as DWSTRING` | The cue banner text; `""` means no banner. |
+| `CTextBox_SetCueBannerText( hTextBox, Text )` | Sets it and repaints. Shown whenever the buffer is empty, focused or not. |
+| `CTextBox_GetCueBannerColor( hTextBox ) as COLORREF` | The banner's colour. |
+| `CTextBox_SetCueBannerColor( hTextBox, clr )` | Sets it and repaints. Independent of the text forecolor. |
+| `CTextBox_GetCueBannerFont( hTextBox ) as HFONT` | The banner's font. 0 means it uses the text font. |
+| `CTextBox_SetCueBannerFont( hTextBox, hFont )` | Sets it and repaints. Pass 0 to fall back to the text font. |
+| `CTextBox_GetTextAlign( hTextBox ) as long` | `TXT_ALIGN_LEFT` (the default), `TXT_ALIGN_CENTER` or `TXT_ALIGN_RIGHT`. |
+| `CTextBox_SetTextAlign( hTextBox, nAlign )` | Sets the horizontal alignment of the whole buffer, in both line modes, and it survives every later `SetText`. **Set it before the control has content.** Applying it rewrites the buffer — save, clear, switch to rich-text mode, apply, switch back, restore — because `TM_PLAINTEXT` refuses `EM_SETPARAFORMAT` silently, and that rewrite **discards the undo history**. Free on an empty control. Centring happens between the margins, not the border edges. An unrecognized value falls back to LEFT. |
+| `CTextBox_GetBorderColor( hTextBox ) as COLORREF` | The frame colour used while the control does not have focus. |
+| `CTextBox_SetBorderColor( hTextBox, clr )` | Sets it and repaints. |
+| `CTextBox_GetFocusBorderColor( hTextBox ) as COLORREF` | The frame colour used while the editor has focus. |
+| `CTextBox_SetFocusBorderColor( hTextBox, clr )` | Sets it and repaints. |
+| `CTextBox_GetBorderWidth( hTextBox ) as integer` | The frame thickness in pixels. |
+| `CTextBox_SetBorderWidth( hTextBox, nWidth )` | Sets it; clamped to a minimum of 0, where **0 means no border at all**. Repositions the editor, whose inset derives from this value. Raw pixels. |
+| `CTextBox_GetCornerRadius( hTextBox ) as integer` | The corner radius in pixels. 0 means square corners. |
+| `CTextBox_SetCornerRadius( hTextBox, nRadius )` | Sets it; clamped to a minimum of 0. The arcs are antialiased, so a large radius does not look stepped. Raw pixels. |
+| `CTextBox_GetOuterBackColor( hTextBox ) as COLORREF` | The colour filling the pixels outside the corner arcs. |
+| `CTextBox_SetOuterBackColor( hTextBox, clr )` | Sets it and repaints. Pass the host's background colour so rounded corners blend into the form. |
+| `CTextBox_SetMenuText( hTextBox, CutText, CopyText, PasteText, SelectAllText = "" )` | Localizes the built-in context menu. An empty `SelectAllText` leaves the current Select All label alone. |
+
+### Context menu and the message pump
+
+| Function | Description |
+|---|---|
+| `CTextBox_FilterMessage( pMsg as MSG ptr ) as boolean` | **Mandatory** in the message pump. Returns TRUE when the open menu consumed the message, in which case do not translate or dispatch it. One call serves every CTextBox in the application, and costs one comparison when no menu is open. |
+| `CTextBox_GetContextMenu( hTextBox ) as HWND` | The control's `CPopupMenu` window, created during `CTextBox_Create` and stable for the control's lifetime. Style it once at startup with the usual `CPopupMenu` setters (colours, fonts, glyphs, item height) and it will match the rest of your menus; left alone it renders with `CPopupMenu`'s own defaults. The **labels** are rebuilt on every open; colours and fonts are not. |
+| `CTextBox_CloseContextMenu()` | Dismisses whichever CTextBox menu is open, anywhere in the application. **Silent** — no select callback fires. For a global "close every menu" moment: application deactivation, or a modal dialog about to open. Takes no handle. |
+
+### Callback registration
+
+| Function | Description |
+|---|---|
+| `CTextBox_SetChangeCallback( hTextBox, usersub )` | Told when the **user** changed the text. |
+| `CTextBox_SetFocusCallback( hTextBox, usersub )` | Told when the editor gains or loses focus. |
+| `CTextBox_SetEnterPressedCallback( hTextBox, usersub )` | Told when ENTER is pressed. Single-line only. |
+| `CTextBox_SetMessageCallback( hTextBox, userfunc )` | Installs an observer, with veto, for key, mouse, focus and context-menu messages. |
+| `CTextBox_SetScrollChangedCallback( hTextBox, usersub )` | Told when the vertical scroll state may have changed. Multiline only. |
+
+All five are optional and independent.
+
+---
+
+## Colors
+
+There is no colour struct. Each colour is its own property with its own getter and setter, and
+each ships with a usable light-theme default, so a control you never colour still looks right.
+
+| Property | Paints | Default |
+|---|---|---|
+| `ForeColor` | All text in the buffer — one colour, no exceptions | `BGR(0,0,0)` |
+| `BackColor` | The editor's background, inside the frame | `BGR(255,255,255)` |
+| `CueColor` | The cue banner, while the buffer is empty | `BGR(128,128,128)` |
+| `BorderColor` | The frame, while the control does not have focus | `BGR(122,122,122)` |
+| `FocusBorderColor` | The frame, while the editor has focus | `BGR(0,120,215)` |
+| `OuterBackColor` | The whole client area underneath the frame — visible only in the pixels outside the corner arcs | `BGR(255,255,255)` |
+
+### Which colour wins
+
+The frame takes exactly one colour per repaint:
+
+```
+editor has focus   ->   FocusBorderColor
+otherwise          ->   BorderColor
+```
+
+There is no hot, pressed or disabled variant of any of these. The control does not track hover,
+and disabling it is the host's business — `EnableWindow` on the container or on the editor —
+which is why there is no disabled colour to configure.
+
+The paint order is: `OuterBackColor` across the whole client, then the rounded frame filled with
+`BackColor` and stroked in whichever border colour applies. Where the border width is 0 the frame
+is filled and not stroked, and the editor covers the whole client anyway.
+
+`CueColor` is independent of `ForeColor` on purpose: a cue banner that is simply the text colour
+reads as content rather than as a hint.
+
+---
+
+## Callbacks
+
+### Change
+
+```freebasic
+type TXT_ChangeCallbackSub as sub( byval hTextBox as HWND )
+```
+
+The text changed because of **user** interaction — typing, cut, paste, undo. Read the new text
+with `CTextBox_GetText`.
+
+It never fires for `CTextBox_SetText`, `CTextBox_ReplaceSel`, `CTextBox_Clear`,
+`CTextBox_SetValue`, a `WM_SETTEXT` or `EM_REPLACESEL` sent through the message door, the numeric
+reformat on focus loss, or the buffer rewrite `CTextBox_SetTextAlign` performs. That is what
+makes it safe to call a setter from inside this handler.
+
+### Focus
+
+```freebasic
+type TXT_FocusCallbackSub as sub( byval hTextBox as HWND, byval bGotFocus as boolean )
+```
+
+The editor gained (`bGotFocus = true`) or lost (`false`) the keyboard focus. In numeric mode the
+value has **already** been reformatted by the time you are called on a focus loss, so the text
+you read here is the formatted one. The control has also already invalidated itself for the
+border-colour switch.
+
+### Enter pressed
+
+```freebasic
+type TXT_EnterPressedCallbackSub as sub( byval hTextBox as HWND )
+```
+
+The user pressed ENTER. **Single-line only** — in a multiline control ENTER inserts a newline and
+this never fires.
+
+The keypress itself is always swallowed, whether or not a callback is installed: no newline is
+inserted and the editor does not beep.
+
+### Scroll changed
+
+```freebasic
+type TXT_ScrollChangedCallbackSub as sub( byval hTextBox as HWND )
+```
+
+The vertical scroll state **may** have changed. Multiline only. It is relayed from the editor's
+`EN_UPDATE`, which fires on any display update — typing, a programmatic `SetText`, scrolling by
+wheel, key or caret movement — and the control's wheel handler calls it directly as well.
+
+Deliberately **not** gated the way the change callback is: a programmatic `SetText` changes the
+line count, and a scrollbar has to hear about that. Treat it as "re-read the numbers", not as
+"the user scrolled":
+
+```freebasic
+sub TextBox_ScrollChangedCallback( byval hTextBox as HWND )
     dim as integer nTotal, nPage, nFirst
-    CTextBox_GetVScrollInfo( hTextBox, nTotal, nPage, nFirst )   ' 2. read the range
-    CVScrollBar_SetRange( hMyScrollBar, nTotal, nPage, nFirst )  '    push it
-end sub
-CTextBox_SetScrollChangedCallback( hBox, @MyScrollChanged )
-
-' 3. The scrollbar says "the user dragged to newPos":
-sub MyScrollCallback( byval hScrollBar as HWND, byval newPos as integer )
-    CTextBox_ScrollToLine( hBox, newPos )
+    CTextBox_GetVScrollInfo( hTextBox, nTotal, nPage, nFirst )
+    CVScrollBar_SetRange( ghScrollBar, nTotal, nPage, nFirst )
 end sub
 ```
 
-**Wheel scrolling is implemented by the control itself** — the RichEdit's native
-`WM_MOUSEWHEEL` handling ignored the message in this configuration even when shown,
-focused and styled `WS_VSCROLL`, so the subclass converts the (accumulated, signed)
-wheel delta to `EM_LINESCROLL`, honoring the system wheel-lines setting including
-page-per-notch. A user wheel scroll fires the ScrollChangedCallback; the programmatic
-`ScrollToLine` stays silent — the same user-interaction-notifies split as the other
-callbacks.
+### Message
 
-`GetVScrollInfo`'s lines-per-page derives from the formatting-rect height and the text
-font's line height — no fudge factors; a partial line at the bottom is not counted.
-Caveat: a programmatic `SetText` into a control that has never been sized/shown may not
-fire the callback (the RichEdit skips the display update) — hosts that fill a hidden
-control should refresh their scrollbar when showing it. Numeric mode is single-line
-only (`SetNumericMode` no-ops on a multiline control); the cue banner word-wraps.
-
-## Building
-
-The demo builds with the FreeBASIC toolchain, 64-bit, with the workspace root on the
-include path (sources include AfxNova as `AfxNova\...`):
-
-```
-fbc64.exe -i "C:\dev" main.bas
+```freebasic
+type TXT_MessageCallbackFunc as function( byval m as CTEXTBOX_MESSAGEINFO ptr ) as boolean
 ```
 
-## Design notes
+Observes messages arriving at the editor **before** the control acts on them. Return TRUE to
+suppress both the control's handling and the editor's own; FALSE to let it proceed.
 
-- **Pixel values are raw.** Margins, border width and corner radius are device pixels;
-  DPI-scale at the call site (`pWindow->ScaleX`). The control never scales a caller's
-  value, so nothing double-scales and `EM_GETMARGINS` always reads back what was set.
+`CTEXTBOX_MESSAGEINFO`:
 
-- **A message loop caution:** `IsDialogMessage` swallows `VK_RETURN` / `VK_ESCAPE`
-  before the textbox ever sees them, which defeats the EnterPressedCallback (and any
-  ESC handling in a MessageCallback). The demo's loop deliberately omits it.
-- The formatting rect (`EM_SETRECT` vertical centering) and the margins
-  (`EM_SETMARGINS`) are set through different messages; the control stores the margins
-  and re-applies them after every rect change so they survive font and size changes.
-- `EM_SETMARGINS` sent through the message door is intercepted for the same reason:
-  the values are stored control-side before forwarding.
-- The corner radius maps to a plain GDI `RoundRect` (curvature = radius × 2). Corners
-  are aliased; the radius is meant to stay small. `SetOuterBackColor` decides what the
-  pixels outside the arcs show.
+| Field | Meaning |
+|---|---|
+| `hTextBox` | The **control** (container) handle, not the RichEdit child |
+| `uMsg` | The message |
+| `wParam` | Its first parameter |
+| `lParam` | Its second parameter |
+
+Only these messages are reported:
+
+`WM_KEYDOWN`, `WM_KEYUP`, `WM_CHAR`, `WM_LBUTTONDOWN`, `WM_LBUTTONUP`, `WM_LBUTTONDBLCLK`,
+`WM_RBUTTONDOWN`, `WM_RBUTTONUP`, `WM_MBUTTONDOWN`, `WM_MBUTTONUP`, `WM_MOUSEMOVE`,
+`WM_MOUSEWHEEL`, `WM_CONTEXTMENU`, `WM_SETFOCUS`, `WM_KILLFOCUS`.
+
+**The return value is honoured uniformly** — there is no message whose suppression is quietly
+ignored. That is a direct consequence of the control taking no mouse capture: the RichEdit
+manages its own selection-drag capture internally, so there is no state of the control's that a
+suppressed message could strand.
+
+Two vetoes worth knowing about:
+
+| Veto | Effect |
+|---|---|
+| `WM_KEYDOWN` with `VK_TAB` | Repurposes Tab. A single-line control otherwise consumes it to move focus to the next or previous tabstop, so vetoing it is how you drive something else with Tab — a picker list, for instance. |
+| `WM_SETFOCUS` / `WM_KILLFOCUS` | Also suppresses the editor's own caret handling. Only do this on purpose. |
+
+A worked example — ESC clears the box:
+
+```freebasic
+function TextBox_MessageCallback( byval m as CTEXTBOX_MESSAGEINFO ptr ) as boolean
+    if (m->uMsg = WM_KEYDOWN) andalso (m->wParam = VK_ESCAPE) then
+        CTextBox_Clear( m->hTextBox )     ' programmatic, so no change callback
+        return true
+    end if
+    return false
+end function
+```
+
+---
+
+## Constants
+
+```freebasic
+enum
+    TXT_ALIGN_LEFT = 0      ' the default
+    TXT_ALIGN_CENTER
+    TXT_ALIGN_RIGHT
+end enum
+```
+
+These are the control's own constants rather than richedit's `PFA_*` values: how alignment
+reaches the editor is an implementation detail, the same way you do not have to know that the
+forecolor arrives by `EM_SETCHARFORMAT`.
+
+There are no `#define`d default constants — the defaults live on the control's own type:
+
+| Setting | Default |
+|---|---|
+| Multiline | `false` |
+| Border width | 1 px |
+| Corner radius | 0 (square corners) |
+| Left / right margin | 0 / 0 px |
+| Text alignment | `TXT_ALIGN_LEFT` |
+| Select on focus | `false` |
+| Numeric mode | `false` |
+| Decimal places | 2 |
+| Zero when empty | `false` |
+| Text font | 0 — the stock `DEFAULT_GUI_FONT` |
+| Cue banner font | 0 — falls back to the text font |
+| Cue banner text | `""` — no banner |
+| Context menu labels | `Cut`, `Copy`, `Paste`, `Select All` |
+
+Colour defaults are listed under **Colors**.
+
+---
+
+## Related controls
+
+**CPopupMenu** is not optional — it *is* the built-in right-click menu, and both its files must
+be in your project and included before `CTextBox.inc`. Reach the control's instance with
+`CTextBox_GetContextMenu` and style it with `CPopupMenu`'s own setters; that handle is stable for
+the control's lifetime, so theming it once at startup is enough. `CTextBox_FilterMessage` exists
+because `CPopupMenu` is not modal, and it simply routes the message on to `CPopupMenu`'s filter.
+
+**CBufferPaint** is the drawing surface the frame is painted through, and the reason for the
+GDI+ bracket and the `ok` identifier rule in **Requirements**.
+
+**CVScrollBar** is what a multiline control's scroll API is shaped for: `ScrollChangedCallback`
+fires, you read `CTextBox_GetVScrollInfo` and push the three numbers into
+`CVScrollBar_SetRange( total, page, pos )`, and the scrollbar's own position callback goes
+straight into `CTextBox_ScrollToLine`. Nothing about CTextBox requires it — any external
+scrollbar that speaks in lines will do — but the units were chosen to make that wiring a
+one-liner in each direction.
