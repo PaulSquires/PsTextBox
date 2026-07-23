@@ -1,5 +1,5 @@
 #include once "frmMain.bi"
-#include once "clsDoubleBuffer.bi"
+#include once "CBufferPaint.bi"
 
 
 ' Last event reported by the callbacks, echoed at the bottom of the window.
@@ -24,7 +24,7 @@ dim shared gwszLastEvent as DWSTRING
 ' Process WM_PAINT message for window/dialog: frmMain
 ' ========================================================================================
 function frmMain_OnPaint( byval hwnd as HWND ) as LRESULT
-    dim as clsDoubleBuffer b
+    dim as CBufferPaint b
     dim pWindow as CWindow ptr = AfxCWindowPtr(hwnd)
     if pWindow = null then return 0
 
