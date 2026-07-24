@@ -1,4 +1,4 @@
-# CTextBox
+# PsTextBox
 
 A textbox control for FreeBASIC Win32 applications: a themeable frame of your own colours —
 border, rounded corners, outer fill — wrapped around a real RichEdit50W editor that does the
@@ -9,7 +9,7 @@ frame is drawn by the control, so nothing about it depends on the visual style t
 to be running, and every colour it paints is one you set. Inside the frame you get a cue banner
 with its own colour and font, vertically centred text on a single-line control, optional
 numeric-only input with a decimal-place limit, and a right-click menu that is itself an
-owner-drawn `CPopupMenu` you can theme to match the rest of your application.
+owner-drawn `PsPopupMenu` you can theme to match the rest of your application.
 
 Single-line by default. Pass `true` at creation for a multiline control: word wrap, ENTER
 inserts a newline, TAB inserts a tab character, and the wheel scrolls. A multiline control never
@@ -20,9 +20,9 @@ straight to an external scrollbar.
 
 ## What it looks like
 
-![The CTextBox demo](CTextBox.png)
+![The PsTextBox demo](PsTextBox.png)
 
-Five boxes, all on one subclassed RichEdit50W: a cue banner with its own colour and a rounded focus border; a read-only box with wide margins; a numeric-only box with two decimal places; a multiline editable box whose cue banner word-wraps; and a multiline read-only box preloaded with 40 lines. The green line at the bottom is the demo printing scroll events from the control's `CVScrollBar`-shaped scroll API.
+Five boxes, all on one subclassed RichEdit50W: a cue banner with its own colour and a rounded focus border; a read-only box with wide margins; a numeric-only box with two decimal places; a multiline editable box whose cue banner word-wraps; and a multiline read-only box preloaded with 40 lines. The green line at the bottom is the demo printing scroll events from the control's `PsVScrollBar`-shaped scroll API.
 
 ---
 
@@ -32,12 +32,12 @@ Five boxes, all on one subclassed RichEdit50W: a cue banner with its own colour 
 
 | File | Purpose |
 |---|---|
-| `CTextBox.bi` | Declarations — types, callbacks, constants, function prototypes |
-| `CTextBox.inc` | Implementation |
-| `CPopupMenu.bi` | The owner-drawn floating menu used for the built-in right-click menu |
-| `CPopupMenu.inc` | Its implementation |
-| `CBufferPaint.bi` | The flicker-free drawing surface the frame is painted through |
-| `CBufferPaint.inc` | Its implementation |
+| `PsTextBox.bi` | Declarations — types, callbacks, constants, function prototypes |
+| `PsTextBox.inc` | Implementation |
+| `PsPopupMenu.bi` | The owner-drawn floating menu used for the built-in right-click menu |
+| `PsPopupMenu.inc` | Its implementation |
+| `PsBufferPaint.bi` | The flicker-free drawing surface the frame is painted through |
+| `PsBufferPaint.inc` | Its implementation |
 
 **AfxNova is required.** The control is built on `CWindow`, uses `AfxNova\AfxRichEdit.inc` for
 the `RichEdit_*` helpers and `AfxNova\AfxWin.inc` for clipboard access, and `CBufferPaint` draws
@@ -48,13 +48,13 @@ through `AfxNova\CGdiPlus.inc`. Sources include AfxNova relative to the workspac
 fbc64.exe -i "C:\dev" main.bas
 ```
 
-**Include order.** `CTextBox.bi` pulls in `CBufferPaint.bi` and `CPopupMenu.bi` itself, but the
+**Include order.** `PsTextBox.bi` pulls in `PsBufferPaint.bi` and `PsPopupMenu.bi` itself, but the
 three implementation files must be included in dependency order:
 
 ```freebasic
-#include once "CBufferPaint.inc"
-#include once "CPopupMenu.inc"    ' CTextBox's built-in right-click menu runs on it
-#include once "CTextBox.inc"
+#include once "PsBufferPaint.inc"
+#include once "PsPopupMenu.inc"    ' PsTextBox's built-in right-click menu runs on it
+#include once "PsTextBox.inc"
 ```
 
 **GDI+ must be running before the first repaint and must outlive the last one.** The frame is
@@ -67,7 +67,7 @@ AfxGdipShutdown( gdipToken )
 ```
 
 `AfxGdipShutdown` must come after every window is destroyed, because each repaint builds and
-tears down a `CBufferPaint`. If you also call `CoInitialize`, shut GDI+ down before
+tears down a `PsBufferPaint`. If you also call `CoInitialize`, shut GDI+ down before
 `CoUninitialize` — GDI+ leans on COM.
 
 **Never name an identifier `ok`.** GDI+ defines `Ok = 0` as a `Status` enum value in namespace
@@ -75,8 +75,8 @@ tears down a `CBufferPaint`. If you also call `CoInitialize`, shut GDI+ down bef
 function called `ok` becomes a duplicate definition the moment you adopt these files. Use `bOK`
 instead.
 
-**`CTextBox_FilterMessage` in your message pump is mandatory.** The right-click menu is a
-`CPopupMenu`, which is not modal: its keyboard navigation and its dismissal on an outside click
+**`PsTextBox_FilterMessage` in your message pump is mandatory.** The right-click menu is a
+`PsPopupMenu`, which is not modal: its keyboard navigation and its dismissal on an outside click
 both live in that filter. Skip the call and the menu still opens and still paints, but it cannot
 be driven with the arrow keys or Enter, and it never closes when the user clicks elsewhere.
 
@@ -84,14 +84,14 @@ be driven with the arrow keys or Enter, and it never closes when the user clicks
 dim uMsg as MSG
 do while GetMessage( @uMsg, null, 0, 0 )
     if uMsg.message = WM_QUIT then exit do
-    if CTextBox_FilterMessage( @uMsg ) then continue do
+    if PsTextBox_FilterMessage( @uMsg ) then continue do
     TranslateMessage @uMsg
     DispatchMessage @uMsg
 loop
 ```
 
-One call serves every CTextBox in the application: only one menu chain can be open at a time and
-the filter finds it. An application that also hosts a `CMenuBar` calls that filter too; the two
+One call serves every PsTextBox in the application: only one menu chain can be open at a time and
+the filter finds it. An application that also hosts a `PsMenuBar` calls that filter too; the two
 are independent and each stands down while the other's menu is up.
 
 **Tab navigation works without `IsDialogMessage`.** The control's container carries
@@ -113,28 +113,28 @@ a multiline box, veto `WM_KEYDOWN` / `VK_TAB` in the message callback and move f
 
 ```freebasic
 ' Create it. The control is created zero-sized and hidden.
-dim as HWND hCtl = CTextBox_Create( hWndParent, IDC_MYFORM_SEARCH )
+dim as HWND hCtl = PsTextBox_Create( hWndParent, IDC_MYFORM_SEARCH )
 
 ' Fonts are yours: the control never creates or deletes an HFONT.
-CTextBox_SetFont( hCtl, ghFont(GUIFONT_10) )
-CTextBox_SetForeColor( hCtl, theme.ForeColor )
-CTextBox_SetBackColor( hCtl, theme.BackColorBox )
+PsTextBox_SetFont( hCtl, ghFont(GUIFONT_10) )
+PsTextBox_SetForeColor( hCtl, theme.ForeColor )
+PsTextBox_SetBackColor( hCtl, theme.BackColorBox )
 
 ' Cue banner, shown whenever the buffer is empty. Its colour and font are its own.
-CTextBox_SetCueBannerText( hCtl, "Search anything..." )
-CTextBox_SetCueBannerColor( hCtl, theme.ForeColorCue )
-CTextBox_SetCueBannerFont( hCtl, ghFont(CUEFONT_10) )
+PsTextBox_SetCueBannerText( hCtl, "Search anything..." )
+PsTextBox_SetCueBannerColor( hCtl, theme.ForeColorCue )
+PsTextBox_SetCueBannerFont( hCtl, ghFont(CUEFONT_10) )
 
 ' Frame. Every pixel value is a raw device pixel: DPI-scale at the call site.
-CTextBox_SetBorderColor( hCtl, theme.BorderColor )
-CTextBox_SetFocusBorderColor( hCtl, theme.FocusAccent )
-CTextBox_SetCornerRadius( hCtl, pWindow->ScaleX(4) )
-CTextBox_SetOuterBackColor( hCtl, theme.BackColorWindow )   ' corners blend into the form
-CTextBox_SetMargins( hCtl, pWindow->ScaleX(8), pWindow->ScaleX(8) )
+PsTextBox_SetBorderColor( hCtl, theme.BorderColor )
+PsTextBox_SetFocusBorderColor( hCtl, theme.FocusAccent )
+PsTextBox_SetCornerRadius( hCtl, pWindow->ScaleX(4) )
+PsTextBox_SetOuterBackColor( hCtl, theme.BackColorWindow )   ' corners blend into the form
+PsTextBox_SetMargins( hCtl, pWindow->ScaleX(8), pWindow->ScaleX(8) )
 
 ' Events.
-CTextBox_SetChangeCallback( hCtl, @TextBox_ChangeCallback )
-CTextBox_SetEnterPressedCallback( hCtl, @TextBox_EnterPressedCallback )
+PsTextBox_SetChangeCallback( hCtl, @TextBox_ChangeCallback )
+PsTextBox_SetEnterPressedCallback( hCtl, @TextBox_EnterPressedCallback )
 
 ' Place it. SWP_SHOWWINDOW is required -- the control is created hidden.
 SetWindowPos( hCtl, 0, x, y, nWidth, nHeight, SWP_NOZORDER or SWP_SHOWWINDOW )
@@ -144,17 +144,17 @@ And the callbacks:
 
 ```freebasic
 sub TextBox_ChangeCallback( byval hTextBox as HWND )
-    ' USER edits only -- typing, cut, paste, undo. CTextBox_SetText never lands here.
-    gFilter = CTextBox_GetText( hTextBox )
+    ' USER edits only -- typing, cut, paste, undo. PsTextBox_SetText never lands here.
+    gFilter = PsTextBox_GetText( hTextBox )
 end sub
 
 sub TextBox_EnterPressedCallback( byval hTextBox as HWND )
     ' Single-line only. The keypress itself is always swallowed: no newline, no beep.
-    RunSearch( CTextBox_GetText( hTextBox ) )
+    RunSearch( PsTextBox_GetText( hTextBox ) )
 end sub
 ```
 
-Plus the mandatory `CTextBox_FilterMessage` line in the message pump, shown above.
+Plus the mandatory `PsTextBox_FilterMessage` line in the message pump, shown above.
 
 That is the whole minimum. Everything below is refinement.
 
@@ -164,7 +164,7 @@ That is the whole minimum. Everything below is refinement.
 
 ### The handle is a real HWND
 
-`CTextBox_Create` returns an ordinary window handle, and every `CTextBox_*` function takes it. It
+`PsTextBox_Create` returns an ordinary window handle, and every `PsTextBox_*` function takes it. It
 is not an opaque type, so you can treat the control as the window it is — `SetWindowPos` to place
 and size it, `ShowWindow` to show it, `GetDlgItem` to find it by the `CtrlID` you passed at
 creation.
@@ -178,14 +178,14 @@ vertical centring of the text (`EM_SETRECT`) and per-control colours (`EM_SETCHA
 
 Two consequences you will meet immediately:
 
-- **`GetFocus() = hTextBox` is always false.** Focus sits on the child. Use `CTextBox_HasFocus`.
+- **`GetFocus() = hTextBox` is always false.** Focus sits on the child. Use `PsTextBox_HasFocus`.
   Calling `SetFocus` on the container, or sending it `WM_SETFOCUS`, redirects focus to the child
   for you.
 - **The child's geometry is derived, never assigned.** Its rect is the container's client rect
   inset by the border width on all four sides. Resizing the control, or changing the border
   width, recomputes it and re-applies the vertical centring and the margins.
 
-`CTextBox_GetRichEditHandle` is the escape hatch for RichEdit-specific messages the flat API and
+`PsTextBox_GetRichEditHandle` is the escape hatch for RichEdit-specific messages the flat API and
 the message door below do not cover.
 
 ### The message door
@@ -199,7 +199,7 @@ itself. The container forwards:
 | `WM_GETTEXT`, `WM_GETTEXTLENGTH`, `WM_CUT`, `WM_COPY`, `WM_PASTE`, `WM_CLEAR`, `WM_UNDO` | Forwarded verbatim |
 | `WM_SETTEXT`, `EM_REPLACESEL` | Forwarded, and treated as programmatic — **no change callback fires** |
 | `EM_SETMARGINS` | Intercepted, so the values are stored and survive later geometry and font changes |
-| `WM_SETFONT` | Runs `CTextBox_SetFont` |
+| `WM_SETFONT` | Runs `PsTextBox_SetFont` |
 | `WM_GETFONT` | Returns the stored text font |
 
 Same operation, two doors: the message for a separate control or window, the function for an
@@ -212,7 +212,7 @@ SendMessage( hCtl, EM_SETSEL, 0, 9 )
 
 ### It is created zero-sized and hidden
 
-`CTextBox_Create` gives the container the styles `WS_CHILD`, `WS_CLIPSIBLINGS` and
+`PsTextBox_Create` gives the container the styles `WS_CHILD`, `WS_CLIPSIBLINGS` and
 `WS_CLIPCHILDREN`, with `WS_EX_CONTROLPARENT` as its extended style. `WS_VISIBLE` is deliberately
 absent, so a newly created control shows nothing until you size it. Include `SWP_SHOWWINDOW` in
 your `SetWindowPos` — and note that the RichEdit child is shown by the first resize, so a control
@@ -220,7 +220,7 @@ that is never sized never displays its editor at all.
 
 ### Single-line and multiline are different controls
 
-The choice is made at `CTextBox_Create` and is fixed for the control's lifetime — `ES_MULTILINE`
+The choice is made at `PsTextBox_Create` and is fixed for the control's lifetime — `ES_MULTILINE`
 cannot be toggled on a live window. What changes:
 
 | | Single-line | Multiline |
@@ -230,7 +230,7 @@ cannot be toggled on a live window. What changes:
 | TAB | Moves focus to the next / previous tabstop | Inserts a tab character |
 | Horizontal scroll | `ES_AUTOHSCROLL` | None — the text wraps instead |
 | Vertical scroll | n/a | Wheel, keys and caret; no native scrollbar |
-| Numeric mode | Available | **Refused** — `CTextBox_SetNumericMode` is a no-op |
+| Numeric mode | Available | **Refused** — `PsTextBox_SetNumericMode` is a no-op |
 | Cue banner | One line, unclipped, on the centred baseline | Word-wrapped at the top left, clipped to the text rect |
 
 ### Pixels, and who scales them
@@ -248,17 +248,17 @@ The editor runs in `TM_PLAINTEXT` mode. That is what gives you one character for
 entire buffer — the control never colours individual characters — and what makes pasted text shed
 any rich formatting it arrived with.
 
-`CTextBox_SetFont` and `CTextBox_SetForeColor` are converted together into a single
+`PsTextBox_SetFont` and `PsTextBox_SetForeColor` are converted together into a single
 `CHARFORMATW` (face, size, charset, bold, italic, underline, strikeout, colour) and applied to
 the whole buffer with `SCF_ALL`. There is no way to format a run of characters differently, and
 that is by design.
 
-`TM_PLAINTEXT` is also the reason `CTextBox_SetTextAlign` is more expensive than it looks — see
+`TM_PLAINTEXT` is also the reason `PsTextBox_SetTextAlign` is more expensive than it looks — see
 that function, and **Behaviour and limits**.
 
 ### Programmatic changes are silent
 
-`CTextBox_SetText`, `CTextBox_ReplaceSel`, `CTextBox_Clear`, `CTextBox_SetValue`, the numeric
+`PsTextBox_SetText`, `PsTextBox_ReplaceSel`, `PsTextBox_Clear`, `PsTextBox_SetValue`, the numeric
 reformat the control performs on focus loss, and a `WM_SETTEXT` or `EM_REPLACESEL` sent through
 the message door all leave the change callback alone. It reports **user** interaction — typing,
 cut, paste, undo — and nothing else, which means you can call a setter from inside your own
@@ -277,7 +277,7 @@ forecolor, and its font falls back to the text font when you do not set one.
 
 The container paints the outer fill across its whole client area first, then the rounded frame on
 top of it. The pixels outside the corner arcs keep showing the outer fill — pass your form's
-background colour to `CTextBox_SetOuterBackColor` and rounded corners blend into it instead of
+background colour to `PsTextBox_SetOuterBackColor` and rounded corners blend into it instead of
 showing white.
 
 The border colour switches to the focus border colour while the editor has focus. A border width
@@ -285,7 +285,7 @@ of 0 draws no border at all, and the child then fills the entire client area.
 
 ### Lifetime
 
-The control frees itself when its window is destroyed, including the `CPopupMenu` window behind
+The control frees itself when its window is destroyed, including the `PsPopupMenu` window behind
 the right-click menu — that is a `WS_POPUP` window, not a child, so it would not go with the
 window tree otherwise. It owns no host resources: every `HFONT` you hand it stays yours to
 delete. Destroy the parent and you are done.
@@ -296,17 +296,17 @@ delete. Destroy the parent and you are done.
 
 Firm properties of the control, not settings:
 
-- **`CTextBox_SetTextAlign` discards the undo history on a control that already has content.**
+- **`PsTextBox_SetTextAlign` discards the undo history on a control that already has content.**
   Set it at setup time, before anything has been typed. `TM_PLAINTEXT` refuses `EM_SETPARAFORMAT`
   outright and *silently*, so the only sequence the editor accepts is: save the text, empty the
   buffer, switch to `TM_RICHTEXT`, apply the format, switch back, restore the text — and then
   empty the undo buffer, because the undo stack now spans a rewrite the user never made. On an
   empty control that costs nothing and nobody notices.
-- **The `CTextBox_FilterMessage` pump call is not optional.** Without it the right-click menu has
+- **The `PsTextBox_FilterMessage` pump call is not optional.** Without it the right-click menu has
   no keyboard navigation and never dismisses on an outside click.
 - **Multiline is a creation-time choice.** There is no setter, because `ES_MULTILINE` cannot be
   toggled on a live window.
-- **Numeric mode is single-line only.** `CTextBox_SetNumericMode` returns without doing anything
+- **Numeric mode is single-line only.** `PsTextBox_SetNumericMode` returns without doing anything
   on a multiline control, and the getter still reads FALSE afterwards.
 - **`EnterPressedCallback` is single-line only**, and the ENTER keypress is always swallowed
   there — no newline, no beep — whether or not a callback is installed.
@@ -315,8 +315,8 @@ Firm properties of the control, not settings:
 - **There is no horizontal scroll API.** A single-line control auto-scrolls horizontally on its
   own (`ES_AUTOHSCROLL`); a multiline control wraps instead, so there is nothing to scroll.
 - **A multiline control never shows a native scrollbar.** No scrollbar styles are applied. Drive
-  an external one through `ScrollChangedCallback` / `CTextBox_GetVScrollInfo` /
-  `CTextBox_ScrollToLine`.
+  an external one through `ScrollChangedCallback` / `PsTextBox_GetVScrollInfo` /
+  `PsTextBox_ScrollToLine`.
 - **The control implements multiline wheel scrolling itself**, converting the delta to
   `EM_LINESCROLL` and honouring `SPI_GETWHEELSCROLLLINES` (including `WHEEL_PAGESCROLL`, which
   scrolls a page per notch). The RichEdit's own wheel handling is bypassed entirely. Sub-notch
@@ -348,21 +348,21 @@ Firm properties of the control, not settings:
 
 | Function | Description |
 |---|---|
-| `CTextBox_Create( hWndParent, CtrlID, bMultiline = false ) as HWND` | Creates the control as a child of `hWndParent` and returns its window handle. `CtrlID` becomes the container's `GWLP_ID`, so `GetDlgItem` finds it. `bMultiline` is fixed for the control's lifetime. Created zero-sized and hidden — place it with `SetWindowPos` including `SWP_SHOWWINDOW`. |
-| `CTextBox_GetRichEditHandle( hTextBox ) as HWND` | The `RichEdit50W` child. For RichEdit-specific messages the flat API and the message door do not cover. |
-| `CTextBox_GetMultiline( hTextBox ) as boolean` | TRUE for a multiline control. Set at creation, never changes. |
-| `CTextBox_HasFocus( hTextBox ) as boolean` | TRUE when the editor owns the keyboard focus. **Use this** — focus lives on the child, so `GetFocus() = hTextBox` is always false. |
+| `PsTextBox_Create( hWndParent, CtrlID, bMultiline = false ) as HWND` | Creates the control as a child of `hWndParent` and returns its window handle. `CtrlID` becomes the container's `GWLP_ID`, so `GetDlgItem` finds it. `bMultiline` is fixed for the control's lifetime. Created zero-sized and hidden — place it with `SetWindowPos` including `SWP_SHOWWINDOW`. |
+| `PsTextBox_GetRichEditHandle( hTextBox ) as HWND` | The `RichEdit50W` child. For RichEdit-specific messages the flat API and the message door do not cover. |
+| `PsTextBox_GetMultiline( hTextBox ) as boolean` | TRUE for a multiline control. Set at creation, never changes. |
+| `PsTextBox_HasFocus( hTextBox ) as boolean` | TRUE when the editor owns the keyboard focus. **Use this** — focus lives on the child, so `GetFocus() = hTextBox` is always false. |
 
 ### Text and content
 
 | Function | Description |
 |---|---|
-| `CTextBox_GetText( hTextBox ) as DWSTRING` | The whole buffer. |
-| `CTextBox_SetText( hTextBox, Text ) as boolean` | Replaces the whole buffer. **Silent** — no change callback. Returns FALSE only when the handle is not a CTextBox. |
-| `CTextBox_GetTextLength( hTextBox ) as integer` | Length in characters. |
-| `CTextBox_GetSelText( hTextBox ) as DWSTRING` | The selected text, `""` when there is no selection. |
-| `CTextBox_ReplaceSel( hTextBox, Text ) as boolean` | Replaces the selection, or inserts at the caret when there is none. **Silent**, but undoable. |
-| `CTextBox_Clear( hTextBox ) as boolean` | Empties the buffer. **Silent** — it is `CTextBox_SetText( h, "" )`. |
+| `PsTextBox_GetText( hTextBox ) as DWSTRING` | The whole buffer. |
+| `PsTextBox_SetText( hTextBox, Text ) as boolean` | Replaces the whole buffer. **Silent** — no change callback. Returns FALSE only when the handle is not a PsTextBox. |
+| `PsTextBox_GetTextLength( hTextBox ) as integer` | Length in characters. |
+| `PsTextBox_GetSelText( hTextBox ) as DWSTRING` | The selected text, `""` when there is no selection. |
+| `PsTextBox_ReplaceSel( hTextBox, Text ) as boolean` | Replaces the selection, or inserts at the caret when there is none. **Silent**, but undoable. |
+| `PsTextBox_Clear( hTextBox ) as boolean` | Empties the buffer. **Silent** — it is `PsTextBox_SetText( h, "" )`. |
 
 ### Selection
 
@@ -370,36 +370,36 @@ Positions are 0-based character indices.
 
 | Function | Description |
 |---|---|
-| `CTextBox_GetSel( hTextBox, byref nStart, byref nEnd )` | The selection range. `nStart = nEnd` means a caret with nothing selected. Both come back 0 when the handle is not a CTextBox. |
-| `CTextBox_SetSel( hTextBox, nStart, nEnd )` | Sets the selection. `nEnd = -1` selects through the end of the text. |
-| `CTextBox_SelectAll( hTextBox )` | Selects everything — `CTextBox_SetSel( h, 0, -1 )`. |
+| `PsTextBox_GetSel( hTextBox, byref nStart, byref nEnd )` | The selection range. `nStart = nEnd` means a caret with nothing selected. Both come back 0 when the handle is not a PsTextBox. |
+| `PsTextBox_SetSel( hTextBox, nStart, nEnd )` | Sets the selection. `nEnd = -1` selects through the end of the text. |
+| `PsTextBox_SelectAll( hTextBox )` | Selects everything — `PsTextBox_SetSel( h, 0, -1 )`. |
 
 ### Edit behaviour
 
 | Function | Description |
 |---|---|
-| `CTextBox_GetLimitText( hTextBox ) as integer` | The current text-length limit, in characters. |
-| `CTextBox_SetLimitText( hTextBox, nLimit )` | Sets the limit. 0 restores the default limit. |
-| `CTextBox_GetReadOnly( hTextBox ) as boolean` | Read-only state, read from the editor's `ES_READONLY` style. |
-| `CTextBox_SetReadOnly( hTextBox, bReadOnly ) as boolean` | Sets it; returns TRUE on success. A read-only control still allows selection, and its context menu still offers Copy and Select All. |
-| `CTextBox_GetModify( hTextBox ) as boolean` | The editor's modified flag — set by user edits, cleared by a `WM_SETTEXT`. |
-| `CTextBox_SetModify( hTextBox, bModified )` | Sets or clears that flag. |
-| `CTextBox_SetPasswordChar( hTextBox, wchChar )` | The character displayed in place of each typed one. **0 turns password mode off.** Repaints the editor. |
-| `CTextBox_GetSelectOnFocus( hTextBox ) as boolean` | Whether the control selects everything when it gains focus. Default FALSE. |
-| `CTextBox_SetSelectOnFocus( hTextBox, bSelect )` | Turns that on. It applies to Tab and to a programmatic `SetFocus`; a **mouse click still places the caret at the click point**, because the click's own caret placement runs after the focus change and wins. |
-| `CTextBox_GetMargins( hTextBox, byref nLeft, byref nRight )` | The stored left and right text margins, in pixels. |
-| `CTextBox_SetMargins( hTextBox, nLeft, nRight )` | Sets them (`EM_SETMARGINS`) and repaints. Raw pixels — DPI-scale at the call site. They are stored, so they survive later font and geometry changes, which re-apply them. |
+| `PsTextBox_GetLimitText( hTextBox ) as integer` | The current text-length limit, in characters. |
+| `PsTextBox_SetLimitText( hTextBox, nLimit )` | Sets the limit. 0 restores the default limit. |
+| `PsTextBox_GetReadOnly( hTextBox ) as boolean` | Read-only state, read from the editor's `ES_READONLY` style. |
+| `PsTextBox_SetReadOnly( hTextBox, bReadOnly ) as boolean` | Sets it; returns TRUE on success. A read-only control still allows selection, and its context menu still offers Copy and Select All. |
+| `PsTextBox_GetModify( hTextBox ) as boolean` | The editor's modified flag — set by user edits, cleared by a `WM_SETTEXT`. |
+| `PsTextBox_SetModify( hTextBox, bModified )` | Sets or clears that flag. |
+| `PsTextBox_SetPasswordChar( hTextBox, wchChar )` | The character displayed in place of each typed one. **0 turns password mode off.** Repaints the editor. |
+| `PsTextBox_GetSelectOnFocus( hTextBox ) as boolean` | Whether the control selects everything when it gains focus. Default FALSE. |
+| `PsTextBox_SetSelectOnFocus( hTextBox, bSelect )` | Turns that on. It applies to Tab and to a programmatic `SetFocus`; a **mouse click still places the caret at the click point**, because the click's own caret placement runs after the focus change and wins. |
+| `PsTextBox_GetMargins( hTextBox, byref nLeft, byref nRight )` | The stored left and right text margins, in pixels. |
+| `PsTextBox_SetMargins( hTextBox, nLeft, nRight )` | Sets them (`EM_SETMARGINS`) and repaints. Raw pixels — DPI-scale at the call site. They are stored, so they survive later font and geometry changes, which re-apply them. |
 
 ### Clipboard and undo
 
 | Function | Description |
 |---|---|
-| `CTextBox_Cut( hTextBox )` | Cuts the selection to the clipboard. |
-| `CTextBox_Copy( hTextBox )` | Copies the selection to the clipboard. |
-| `CTextBox_Paste( hTextBox )` | Pastes. **In numeric mode the paste is vetted first** and rejected wholesale if the result would not be a valid number — nothing is ever half-pasted. |
-| `CTextBox_CanPaste( hTextBox ) as boolean` | Whether the clipboard holds something the editor would accept. |
-| `CTextBox_Undo( hTextBox ) as boolean` | Undoes the last edit; TRUE if something was undone. |
-| `CTextBox_CanUndo( hTextBox ) as boolean` | Whether there is anything to undo. |
+| `PsTextBox_Cut( hTextBox )` | Cuts the selection to the clipboard. |
+| `PsTextBox_Copy( hTextBox )` | Copies the selection to the clipboard. |
+| `PsTextBox_Paste( hTextBox )` | Pastes. **In numeric mode the paste is vetted first** and rejected wholesale if the result would not be a valid number — nothing is ever half-pasted. |
+| `PsTextBox_CanPaste( hTextBox ) as boolean` | Whether the clipboard holds something the editor would accept. |
+| `PsTextBox_Undo( hTextBox ) as boolean` | Undoes the last edit; TRUE if something was undone. |
+| `PsTextBox_CanUndo( hTextBox ) as boolean` | Whether there is anything to undo. |
 
 These six drive the editor exactly as Ctrl+X / Ctrl+C / Ctrl+V / Ctrl+Z would, so unlike the
 text setters they are **not** silent — the change callback fires for them.
@@ -419,25 +419,25 @@ is on.
 
 | Function | Description |
 |---|---|
-| `CTextBox_GetNumericMode( hTextBox ) as boolean` | Whether numeric filtering is on. Default FALSE. |
-| `CTextBox_SetNumericMode( hTextBox, bEnable )` | Turns it on or off. **A no-op on a multiline control** — the getter still reads FALSE afterwards. Does not reformat whatever is already in the box. |
-| `CTextBox_GetDecimalPlaces( hTextBox ) as integer` | The fractional-digit limit. Default 2. |
-| `CTextBox_SetDecimalPlaces( hTextBox, nPlaces )` | Sets it; clamped to a minimum of 0, where **0 means integers only** and the decimal point is rejected outright. Does not reformat existing text. |
-| `CTextBox_GetValue( hTextBox ) as double` | The text as a double. An empty box, `"-"` and `"."` all read as 0. |
-| `CTextBox_SetValue( hTextBox, nValue ) as boolean` | Sets the text from a double, formatted to `DecimalPlaces` and **without thousands separators** (a comma is not an accepted input character). **Silent.** |
-| `CTextBox_GetZeroWhenEmpty( hTextBox ) as boolean` | Whether an empty numeric box displays the formatted zero. Default FALSE. |
-| `CTextBox_SetZeroWhenEmpty( hTextBox, bEnable )` | Turns it on. Stamps `"0.00"` immediately if the box is in numeric mode, currently empty **and not focused** — a focused box is left alone because the user may be mid-entry, and its next focus loss will stamp it. It trumps the cue banner, which effectively never shows again once the box has been visited. |
+| `PsTextBox_GetNumericMode( hTextBox ) as boolean` | Whether numeric filtering is on. Default FALSE. |
+| `PsTextBox_SetNumericMode( hTextBox, bEnable )` | Turns it on or off. **A no-op on a multiline control** — the getter still reads FALSE afterwards. Does not reformat whatever is already in the box. |
+| `PsTextBox_GetDecimalPlaces( hTextBox ) as integer` | The fractional-digit limit. Default 2. |
+| `PsTextBox_SetDecimalPlaces( hTextBox, nPlaces )` | Sets it; clamped to a minimum of 0, where **0 means integers only** and the decimal point is rejected outright. Does not reformat existing text. |
+| `PsTextBox_GetValue( hTextBox ) as double` | The text as a double. An empty box, `"-"` and `"."` all read as 0. |
+| `PsTextBox_SetValue( hTextBox, nValue ) as boolean` | Sets the text from a double, formatted to `DecimalPlaces` and **without thousands separators** (a comma is not an accepted input character). **Silent.** |
+| `PsTextBox_GetZeroWhenEmpty( hTextBox ) as boolean` | Whether an empty numeric box displays the formatted zero. Default FALSE. |
+| `PsTextBox_SetZeroWhenEmpty( hTextBox, bEnable )` | Turns it on. Stamps `"0.00"` immediately if the box is in numeric mode, currently empty **and not focused** — a focused box is left alone because the user may be mid-entry, and its next focus loss will stamp it. It trumps the cue banner, which effectively never shows again once the box has been visited. |
 
 ### Multiline and scrolling
 
 Units are **lines**, shaped 1:1 for an external scrollbar: on each `ScrollChangedCallback` read
 the three numbers and push them into the scrollbar's range, and wire the scrollbar's position
-callback back to `CTextBox_ScrollToLine`.
+callback back to `PsTextBox_ScrollToLine`.
 
 | Function | Description |
 |---|---|
-| `CTextBox_GetVScrollInfo( hTextBox, byref nTotalLines, byref nLinesPerPage, byref nFirstVisibleLine )` | The whole vertical scroll state. `nLinesPerPage` is the formatting-rect height divided by the text font's line height (`tmHeight + tmExternalLeading`) — **a partial line at the bottom is not counted**. All three come back 0 when the control has no usable geometry yet, so call it after the control has been sized. A single-line control reports one total line and a first visible line of 0. |
-| `CTextBox_ScrollToLine( hTextBox, nLine )` | Scrolls so `nLine` (0-based) becomes the first visible line. Negative values are clamped to 0, the editor clamps overscroll at the other end, and a request for the line already at the top does nothing. |
+| `PsTextBox_GetVScrollInfo( hTextBox, byref nTotalLines, byref nLinesPerPage, byref nFirstVisibleLine )` | The whole vertical scroll state. `nLinesPerPage` is the formatting-rect height divided by the text font's line height (`tmHeight + tmExternalLeading`) — **a partial line at the bottom is not counted**. All three come back 0 when the control has no usable geometry yet, so call it after the control has been sized. A single-line control reports one total line and a first visible line of 0. |
+| `PsTextBox_ScrollToLine( hTextBox, nLine )` | Scrolls so `nLine` (0-based) becomes the first visible line. Negative values are clamped to 0, the editor clamps overscroll at the other end, and a request for the line already at the top does nothing. |
 
 ### Appearance
 
@@ -445,49 +445,49 @@ All fonts are caller-owned `HFONT`s — the control never deletes one.
 
 | Function | Description |
 |---|---|
-| `CTextBox_GetFont( hTextBox ) as HFONT` | The text font. 0 means the stock `DEFAULT_GUI_FONT` is in use. |
-| `CTextBox_SetFont( hTextBox, hFont ) as boolean` | Sets it, rebuilds the character format for the whole buffer, redoes the single-line vertical centring, re-applies the margins and repaints. |
-| `CTextBox_GetForeColor( hTextBox ) as COLORREF` | The text colour. |
-| `CTextBox_SetForeColor( hTextBox, clr ) as COLORREF` | Sets it and re-applies the character format. **Returns the previous colour.** |
-| `CTextBox_GetBackColor( hTextBox ) as COLORREF` | The editor's background colour. |
-| `CTextBox_SetBackColor( hTextBox, clr ) as COLORREF` | Sets it (`EM_SETBKGNDCOLOR`) and repaints. **Returns the previous colour.** |
-| `CTextBox_GetCueBannerText( hTextBox ) as DWSTRING` | The cue banner text; `""` means no banner. |
-| `CTextBox_SetCueBannerText( hTextBox, Text )` | Sets it and repaints. Shown whenever the buffer is empty, focused or not. |
-| `CTextBox_GetCueBannerColor( hTextBox ) as COLORREF` | The banner's colour. |
-| `CTextBox_SetCueBannerColor( hTextBox, clr )` | Sets it and repaints. Independent of the text forecolor. |
-| `CTextBox_GetCueBannerFont( hTextBox ) as HFONT` | The banner's font. 0 means it uses the text font. |
-| `CTextBox_SetCueBannerFont( hTextBox, hFont )` | Sets it and repaints. Pass 0 to fall back to the text font. |
-| `CTextBox_GetTextAlign( hTextBox ) as long` | `TXT_ALIGN_LEFT` (the default), `TXT_ALIGN_CENTER` or `TXT_ALIGN_RIGHT`. |
-| `CTextBox_SetTextAlign( hTextBox, nAlign )` | Sets the horizontal alignment of the whole buffer, in both line modes, and it survives every later `SetText`. **Set it before the control has content.** Applying it rewrites the buffer — save, clear, switch to rich-text mode, apply, switch back, restore — because `TM_PLAINTEXT` refuses `EM_SETPARAFORMAT` silently, and that rewrite **discards the undo history**. Free on an empty control. Centring happens between the margins, not the border edges. An unrecognized value falls back to LEFT. |
-| `CTextBox_GetBorderColor( hTextBox ) as COLORREF` | The frame colour used while the control does not have focus. |
-| `CTextBox_SetBorderColor( hTextBox, clr )` | Sets it and repaints. |
-| `CTextBox_GetFocusBorderColor( hTextBox ) as COLORREF` | The frame colour used while the editor has focus. |
-| `CTextBox_SetFocusBorderColor( hTextBox, clr )` | Sets it and repaints. |
-| `CTextBox_GetBorderWidth( hTextBox ) as integer` | The frame thickness in pixels. |
-| `CTextBox_SetBorderWidth( hTextBox, nWidth )` | Sets it; clamped to a minimum of 0, where **0 means no border at all**. Repositions the editor, whose inset derives from this value. Raw pixels. |
-| `CTextBox_GetCornerRadius( hTextBox ) as integer` | The corner radius in pixels. 0 means square corners. |
-| `CTextBox_SetCornerRadius( hTextBox, nRadius )` | Sets it; clamped to a minimum of 0. The arcs are antialiased, so a large radius does not look stepped. Raw pixels. |
-| `CTextBox_GetOuterBackColor( hTextBox ) as COLORREF` | The colour filling the pixels outside the corner arcs. |
-| `CTextBox_SetOuterBackColor( hTextBox, clr )` | Sets it and repaints. Pass the host's background colour so rounded corners blend into the form. |
-| `CTextBox_SetMenuText( hTextBox, CutText, CopyText, PasteText, SelectAllText = "" )` | Localizes the built-in context menu. An empty `SelectAllText` leaves the current Select All label alone. |
+| `PsTextBox_GetFont( hTextBox ) as HFONT` | The text font. 0 means the stock `DEFAULT_GUI_FONT` is in use. |
+| `PsTextBox_SetFont( hTextBox, hFont ) as boolean` | Sets it, rebuilds the character format for the whole buffer, redoes the single-line vertical centring, re-applies the margins and repaints. |
+| `PsTextBox_GetForeColor( hTextBox ) as COLORREF` | The text colour. |
+| `PsTextBox_SetForeColor( hTextBox, clr ) as COLORREF` | Sets it and re-applies the character format. **Returns the previous colour.** |
+| `PsTextBox_GetBackColor( hTextBox ) as COLORREF` | The editor's background colour. |
+| `PsTextBox_SetBackColor( hTextBox, clr ) as COLORREF` | Sets it (`EM_SETBKGNDCOLOR`) and repaints. **Returns the previous colour.** |
+| `PsTextBox_GetCueBannerText( hTextBox ) as DWSTRING` | The cue banner text; `""` means no banner. |
+| `PsTextBox_SetCueBannerText( hTextBox, Text )` | Sets it and repaints. Shown whenever the buffer is empty, focused or not. |
+| `PsTextBox_GetCueBannerColor( hTextBox ) as COLORREF` | The banner's colour. |
+| `PsTextBox_SetCueBannerColor( hTextBox, clr )` | Sets it and repaints. Independent of the text forecolor. |
+| `PsTextBox_GetCueBannerFont( hTextBox ) as HFONT` | The banner's font. 0 means it uses the text font. |
+| `PsTextBox_SetCueBannerFont( hTextBox, hFont )` | Sets it and repaints. Pass 0 to fall back to the text font. |
+| `PsTextBox_GetTextAlign( hTextBox ) as long` | `TXT_ALIGN_LEFT` (the default), `TXT_ALIGN_CENTER` or `TXT_ALIGN_RIGHT`. |
+| `PsTextBox_SetTextAlign( hTextBox, nAlign )` | Sets the horizontal alignment of the whole buffer, in both line modes, and it survives every later `SetText`. **Set it before the control has content.** Applying it rewrites the buffer — save, clear, switch to rich-text mode, apply, switch back, restore — because `TM_PLAINTEXT` refuses `EM_SETPARAFORMAT` silently, and that rewrite **discards the undo history**. Free on an empty control. Centring happens between the margins, not the border edges. An unrecognized value falls back to LEFT. |
+| `PsTextBox_GetBorderColor( hTextBox ) as COLORREF` | The frame colour used while the control does not have focus. |
+| `PsTextBox_SetBorderColor( hTextBox, clr )` | Sets it and repaints. |
+| `PsTextBox_GetFocusBorderColor( hTextBox ) as COLORREF` | The frame colour used while the editor has focus. |
+| `PsTextBox_SetFocusBorderColor( hTextBox, clr )` | Sets it and repaints. |
+| `PsTextBox_GetBorderWidth( hTextBox ) as integer` | The frame thickness in pixels. |
+| `PsTextBox_SetBorderWidth( hTextBox, nWidth )` | Sets it; clamped to a minimum of 0, where **0 means no border at all**. Repositions the editor, whose inset derives from this value. Raw pixels. |
+| `PsTextBox_GetCornerRadius( hTextBox ) as integer` | The corner radius in pixels. 0 means square corners. |
+| `PsTextBox_SetCornerRadius( hTextBox, nRadius )` | Sets it; clamped to a minimum of 0. The arcs are antialiased, so a large radius does not look stepped. Raw pixels. |
+| `PsTextBox_GetOuterBackColor( hTextBox ) as COLORREF` | The colour filling the pixels outside the corner arcs. |
+| `PsTextBox_SetOuterBackColor( hTextBox, clr )` | Sets it and repaints. Pass the host's background colour so rounded corners blend into the form. |
+| `PsTextBox_SetMenuText( hTextBox, CutText, CopyText, PasteText, SelectAllText = "" )` | Localizes the built-in context menu. An empty `SelectAllText` leaves the current Select All label alone. |
 
 ### Context menu and the message pump
 
 | Function | Description |
 |---|---|
-| `CTextBox_FilterMessage( pMsg as MSG ptr ) as boolean` | **Mandatory** in the message pump. Returns TRUE when the open menu consumed the message, in which case do not translate or dispatch it. One call serves every CTextBox in the application, and costs one comparison when no menu is open. |
-| `CTextBox_GetContextMenu( hTextBox ) as HWND` | The control's `CPopupMenu` window, created during `CTextBox_Create` and stable for the control's lifetime. Style it once at startup with the usual `CPopupMenu` setters (colours, fonts, glyphs, item height) and it will match the rest of your menus; left alone it renders with `CPopupMenu`'s own defaults. The **labels** are rebuilt on every open; colours and fonts are not. |
-| `CTextBox_CloseContextMenu()` | Dismisses whichever CTextBox menu is open, anywhere in the application. **Silent** — no select callback fires. For a global "close every menu" moment: application deactivation, or a modal dialog about to open. Takes no handle. |
+| `PsTextBox_FilterMessage( pMsg as MSG ptr ) as boolean` | **Mandatory** in the message pump. Returns TRUE when the open menu consumed the message, in which case do not translate or dispatch it. One call serves every PsTextBox in the application, and costs one comparison when no menu is open. |
+| `PsTextBox_GetContextMenu( hTextBox ) as HWND` | The control's `PsPopupMenu` window, created during `PsTextBox_Create` and stable for the control's lifetime. Style it once at startup with the usual `PsPopupMenu` setters (colours, fonts, glyphs, item height) and it will match the rest of your menus; left alone it renders with `PsPopupMenu`'s own defaults. The **labels** are rebuilt on every open; colours and fonts are not. |
+| `PsTextBox_CloseContextMenu()` | Dismisses whichever PsTextBox menu is open, anywhere in the application. **Silent** — no select callback fires. For a global "close every menu" moment: application deactivation, or a modal dialog about to open. Takes no handle. |
 
 ### Callback registration
 
 | Function | Description |
 |---|---|
-| `CTextBox_SetChangeCallback( hTextBox, usersub )` | Told when the **user** changed the text. |
-| `CTextBox_SetFocusCallback( hTextBox, usersub )` | Told when the editor gains or loses focus. |
-| `CTextBox_SetEnterPressedCallback( hTextBox, usersub )` | Told when ENTER is pressed. Single-line only. |
-| `CTextBox_SetMessageCallback( hTextBox, userfunc )` | Installs an observer, with veto, for key, mouse, focus and context-menu messages. |
-| `CTextBox_SetScrollChangedCallback( hTextBox, usersub )` | Told when the vertical scroll state may have changed. Multiline only. |
+| `PsTextBox_SetChangeCallback( hTextBox, usersub )` | Told when the **user** changed the text. |
+| `PsTextBox_SetFocusCallback( hTextBox, usersub )` | Told when the editor gains or loses focus. |
+| `PsTextBox_SetEnterPressedCallback( hTextBox, usersub )` | Told when ENTER is pressed. Single-line only. |
+| `PsTextBox_SetMessageCallback( hTextBox, userfunc )` | Installs an observer, with veto, for key, mouse, focus and context-menu messages. |
+| `PsTextBox_SetScrollChangedCallback( hTextBox, usersub )` | Told when the vertical scroll state may have changed. Multiline only. |
 
 All five are optional and independent.
 
@@ -538,11 +538,11 @@ type TXT_ChangeCallbackSub as sub( byval hTextBox as HWND )
 ```
 
 The text changed because of **user** interaction — typing, cut, paste, undo. Read the new text
-with `CTextBox_GetText`.
+with `PsTextBox_GetText`.
 
-It never fires for `CTextBox_SetText`, `CTextBox_ReplaceSel`, `CTextBox_Clear`,
-`CTextBox_SetValue`, a `WM_SETTEXT` or `EM_REPLACESEL` sent through the message door, the numeric
-reformat on focus loss, or the buffer rewrite `CTextBox_SetTextAlign` performs. That is what
+It never fires for `PsTextBox_SetText`, `PsTextBox_ReplaceSel`, `PsTextBox_Clear`,
+`PsTextBox_SetValue`, a `WM_SETTEXT` or `EM_REPLACESEL` sent through the message door, the numeric
+reformat on focus loss, or the buffer rewrite `PsTextBox_SetTextAlign` performs. That is what
 makes it safe to call a setter from inside this handler.
 
 ### Focus
@@ -585,21 +585,21 @@ line count, and a scrollbar has to hear about that. Treat it as "re-read the num
 ```freebasic
 sub TextBox_ScrollChangedCallback( byval hTextBox as HWND )
     dim as integer nTotal, nPage, nFirst
-    CTextBox_GetVScrollInfo( hTextBox, nTotal, nPage, nFirst )
-    CVScrollBar_SetRange( ghScrollBar, nTotal, nPage, nFirst )
+    PsTextBox_GetVScrollInfo( hTextBox, nTotal, nPage, nFirst )
+    PsVScrollBar_SetRange( ghScrollBar, nTotal, nPage, nFirst )
 end sub
 ```
 
 ### Message
 
 ```freebasic
-type TXT_MessageCallbackFunc as function( byval m as CTEXTBOX_MESSAGEINFO ptr ) as boolean
+type TXT_MessageCallbackFunc as function( byval m as PSTEXTBOX_MESSAGEINFO ptr ) as boolean
 ```
 
 Observes messages arriving at the editor **before** the control acts on them. Return TRUE to
 suppress both the control's handling and the editor's own; FALSE to let it proceed.
 
-`CTEXTBOX_MESSAGEINFO`:
+`PSTEXTBOX_MESSAGEINFO`:
 
 | Field | Meaning |
 |---|---|
@@ -629,9 +629,9 @@ Two vetoes worth knowing about:
 A worked example — ESC clears the box:
 
 ```freebasic
-function TextBox_MessageCallback( byval m as CTEXTBOX_MESSAGEINFO ptr ) as boolean
+function TextBox_MessageCallback( byval m as PSTEXTBOX_MESSAGEINFO ptr ) as boolean
     if (m->uMsg = WM_KEYDOWN) andalso (m->wParam = VK_ESCAPE) then
-        CTextBox_Clear( m->hTextBox )     ' programmatic, so no change callback
+        PsTextBox_Clear( m->hTextBox )     ' programmatic, so no change callback
         return true
     end if
     return false
@@ -678,18 +678,18 @@ Colour defaults are listed under **Colors**.
 
 ## Related controls
 
-**CPopupMenu** is not optional — it *is* the built-in right-click menu, and both its files must
-be in your project and included before `CTextBox.inc`. Reach the control's instance with
-`CTextBox_GetContextMenu` and style it with `CPopupMenu`'s own setters; that handle is stable for
-the control's lifetime, so theming it once at startup is enough. `CTextBox_FilterMessage` exists
-because `CPopupMenu` is not modal, and it simply routes the message on to `CPopupMenu`'s filter.
+**PsPopupMenu** is not optional — it *is* the built-in right-click menu, and both its files must
+be in your project and included before `PsTextBox.inc`. Reach the control's instance with
+`PsTextBox_GetContextMenu` and style it with `PsPopupMenu`'s own setters; that handle is stable for
+the control's lifetime, so theming it once at startup is enough. `PsTextBox_FilterMessage` exists
+because `PsPopupMenu` is not modal, and it simply routes the message on to `PsPopupMenu`'s filter.
 
-**CBufferPaint** is the drawing surface the frame is painted through, and the reason for the
+**PsBufferPaint** is the drawing surface the frame is painted through, and the reason for the
 GDI+ bracket and the `ok` identifier rule in **Requirements**.
 
-**CVScrollBar** is what a multiline control's scroll API is shaped for: `ScrollChangedCallback`
-fires, you read `CTextBox_GetVScrollInfo` and push the three numbers into
-`CVScrollBar_SetRange( total, page, pos )`, and the scrollbar's own position callback goes
-straight into `CTextBox_ScrollToLine`. Nothing about CTextBox requires it — any external
+**PsVScrollBar** is what a multiline control's scroll API is shaped for: `ScrollChangedCallback`
+fires, you read `PsTextBox_GetVScrollInfo` and push the three numbers into
+`PsVScrollBar_SetRange( total, page, pos )`, and the scrollbar's own position callback goes
+straight into `PsTextBox_ScrollToLine`. Nothing about PsTextBox requires it — any external
 scrollbar that speaks in lines will do — but the units were chosen to make that wiring a
 one-liner in each direction.

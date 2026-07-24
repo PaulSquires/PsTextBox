@@ -1,5 +1,5 @@
 ' ========================================================================================
-' CTextBox demo
+' PsTextBox demo
 ' ========================================================================================
 
 #define UNICODE
@@ -42,9 +42,9 @@ dim shared theme as THEME_TYPE
 
 
 
-#include once "CBufferPaint.inc"
-#include once "CPopupMenu.inc"    ' CTextBox's built-in right-click menu runs on it
-#include once "CTextBox.inc"
+#include once "PsBufferPaint.inc"
+#include once "PsPopupMenu.inc"    ' PsTextBox's built-in right-click menu runs on it
+#include once "PsTextBox.inc"
 #include once "frmMain.inc"
 
 
@@ -62,7 +62,7 @@ function WinMain( _
     CoInitialize(null)
 
     ' Show the main form
-    ' Initialize GDI+ (CBufferPaint draws all geometry through it). Must be
+    ' Initialize GDI+ (PsBufferPaint draws all geometry through it). Must be
     ' running before the first WM_PAINT builds a buffer, and must outlive every one of
     ' them, so it brackets frmMain_Show.
     dim as ULONG_PTR gdipToken = AfxGdipInit()
@@ -70,7 +70,7 @@ function WinMain( _
     function = frmMain_Show( 0 )
 
     ' Uninitialize the COM library
-    ' Every window is destroyed and every CBufferPaint has run its destructor by here,
+    ' Every window is destroyed and every PsBufferPaint has run its destructor by here,
     ' so no CGp* object can still be alive. Precedes CoUninitialize: GDI+ leans on COM.
     AfxGdipShutdown( gdipToken )
 
