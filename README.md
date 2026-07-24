@@ -18,6 +18,14 @@ straight to an external scrollbar.
 
 ---
 
+## What it looks like
+
+![The CTextBox demo](CTextBox.png)
+
+Five boxes, all on one subclassed RichEdit50W: a cue banner with its own colour and a rounded focus border; a read-only box with wide margins; a numeric-only box with two decimal places; a multiline editable box whose cue banner word-wraps; and a multiline read-only box preloaded with 40 lines. The green line at the bottom is the demo printing scroll events from the control's `CVScrollBar`-shaped scroll API.
+
+---
+
 ## Requirements
 
 **Files to copy into your project:**
